@@ -194,6 +194,7 @@ import {
   DocumentText,
   Refresh
 } from '@vicons/ionicons5'
+import LogUtil from "@/utils/LogUtil.js";
 
 const tokenStore = useTokenStore()
 const message = useMessage()
@@ -264,7 +265,7 @@ const LOG_MAX = 500
 const log = (message, type = 'info') => {
   const time = new Date().toLocaleTimeString()
   logList.value.push({ time, message, type })
-
+  LogUtil.info(message)
   if (logList.value.length > LOG_MAX) {
     logList.value.splice(0, logList.value.length - LOG_MAX)
   }
@@ -448,7 +449,9 @@ const executeDailyTasks = async (roleInfoResp, logFn, progressFn) => {
   }
 
   logFn('开始执行每日任务补差')
-
+  const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
+  let currentFormation = teamInfo?.presetTeamInfo?.useTeamId
+  logFn('当前阵容为:'+currentFormation)
   // 检查已完成的任务
   const completedTasks = roleData.dailyTask?.complete ?? {}
   const isTaskCompleted = (taskId) => completedTasks[taskId] === -1
@@ -784,7 +787,8 @@ const executeDailyTasks = async (roleInfoResp, logFn, progressFn) => {
   // 确保进度为100%
   if (progressFn) progressFn(tokenId, 100)
   logFn('所有任务执行完成', 'success')
-
+  //切换回原本阵容
+  await switchToFormationIfNeeded(tokenId, currentFormation, '原阵容', logFn)
   // 最后刷新一次角色信息
   await new Promise(resolve => setTimeout(resolve, 2000))
   await refreshRoleInfo()
