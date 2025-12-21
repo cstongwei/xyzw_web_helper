@@ -9,7 +9,7 @@
           <n-icon>
             <Menu />
           </n-icon>
-          <span class="brand-text">XYZW 控制台</span>
+          <span class="brand-text">智慧助手控制台</span>
         </div>
       </div>
 
@@ -19,6 +19,10 @@
               <Home />
             </n-icon>
             <span>首页</span>
+          </router-link>
+          <router-link to="quickly-task" class="drawer-item" @click="isMobileMenuOpen = false">
+            <n-icon><Settings /></n-icon>
+            <span>快捷管理</span>
           </router-link>
           <router-link to="/admin/game-features" class="nav-item" active-class="active">
             <n-icon>

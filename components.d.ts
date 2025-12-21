@@ -31,6 +31,7 @@ declare module 'vue' {
     ClubHistoryRecords: typeof import('./src/components/Club/ClubHistoryRecords.vue')['default']
     ClubInfo: typeof import('./src/components/Club/ClubInfo.vue')['default']
     ClubWarrank: typeof import('./src/components/Club/ClubWarrank.vue')['default']
+    DailyTask: typeof import('./src/components/Quickly/DailyTask.vue')['default']
     DailyTaskCard: typeof import('./src/components/Daily/DailyTaskCard.vue')['default']
     DailyTaskStatus: typeof import('./src/components/Daily/DailyTaskStatus.vue')['default']
     FightPvp: typeof import('./src/components/cards/FightPvp.vue')['default']
@@ -38,6 +39,7 @@ declare module 'vue' {
     GameStatus: typeof import('./src/components/GameStatus.vue')['default']
     GoldRankListPageCard: typeof import('./src/components/cards/GoldRankListPageCard.vue')['default']
     HangUpStatusCard: typeof import('./src/components/cards/HangUpStatusCard.vue')['default']
+    HangupTask: typeof import('./src/components/Quickly/HangupTask.vue')['default']
     IdentityCard: typeof import('./src/components/Common/IdentityCard.vue')['default']
     MessageTester: typeof import('./src/components/Test/MessageTester.vue')['default']
     MonthlyTasksCard: typeof import('./src/components/cards/MonthlyTasksCard.vue')['default']
@@ -47,6 +49,7 @@ declare module 'vue' {
     RoleProfileCard: typeof import('./src/components/Setting/RoleProfileCard.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SaltJarTask: typeof import('./src/components/Quickly/SaltJarTask.vue')['default']
     Signin: typeof import('./src/components/Club/Signin.vue')['default']
     StarUpgradeCard: typeof import('./src/components/cards/StarUpgradeCard.vue')['default']
     StudyChallengeCard: typeof import('./src/components/cards/StudyChallengeCard.vue')['default']
@@ -57,6 +60,7 @@ declare module 'vue' {
     TopClubListPageCard: typeof import('./src/components/cards/TopClubListPageCard.vue')['default']
     TopRankListPageCard: typeof import('./src/components/cards/TopRankListPageCard.vue')['default']
     TowerStatus: typeof import('./src/components/Tower/TowerStatus.vue')['default']
+    TowerTask: typeof import('./src/components/Quickly/TowerTask.vue')['default']
     WebSocketTester: typeof import('./src/components/Test/WebSocketTester.vue')['default']
   }
 }

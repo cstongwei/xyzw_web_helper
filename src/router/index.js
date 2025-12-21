@@ -81,6 +81,15 @@ const my_routes = [
           requiresToken: true
         }
       },
+      {
+        path: 'quickly-task',
+        name: 'quicklyManage',
+        component: () => import('@/views/QuicklyManager.vue'),
+        meta: {
+          title: '日常任务',
+          requiresToken: true
+        }
+      },
       // 增加自动路由引用
       ...generatedRoutes,
     ]
