@@ -583,12 +583,6 @@ export default function useDailyTaskExecutor() {
             await switchToFormationIfNeeded(tokenId, currentFormation, '原阵容', logFn)
         }
 
-
-        // 最后刷新一次角色信息
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        await refreshRoleInfo(tokenId)
-
-
         //答题
         // 获取当前星期几（0=周日，1=周一...6=周六）
         const answerDateOfWeek = new Date().getDay()
@@ -609,8 +603,10 @@ export default function useDailyTaskExecutor() {
             } else if (!isRightTime) {
                 logFn(`[${tokenId}] 当前时间${currentHour}点，不在8:00-20:00范围内，跳过答题逻辑`, 'warning')
             }
+            // 最后刷新一次角色信息
+            await new Promise(resolve => setTimeout(resolve, 2000))
         }
-
+        await refreshRoleInfo(tokenId)
     }
 
     // 执行单个账号的每日任务（供DailyTask.vue使用）
