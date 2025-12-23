@@ -17,17 +17,65 @@ const tasks = ref([
     { id: 13, name: '进行1场竞技场战斗', completed: false, loading: false },
     { id: 14, name: '收获1个任意盐罐', completed: false, loading: false }
 ])
+const hasCompeteToday = (tokenId, taskName) => {
+    const key = `${taskName}-completed:${tokenId}`;
+    const savedTime = localStorage.getItem(key);
 
-const hasCompeteToday = (tokenId,taskName) => {
-    const key = `${taskName}-completed:${tokenId}`
-    const savedTime = localStorage.getItem(key)
-    if (!savedTime) return false
+    // 清理过期数据（前一天及更早的记录）
+    try {
+        cleanExpiredCompletionRecords(tokenId);
+    } catch (e) {
+        console.error('清理过期记录失败:', e); // 建议打印错误，方便调试
+    }
 
-    const savedDate = new Date(savedTime).toDateString()
-    const today = new Date().toDateString()
-    return savedDate === today
-    // return false
+    if (!savedTime) return false;
+
+    // 精确判断是否为今天（忽略时间部分）
+    const savedDate = new Date(savedTime).toDateString();
+    const today = new Date().toDateString();
+    return savedDate === today;
 }
+
+// 优化后的清理方法
+const cleanExpiredCompletionRecords = (tokenId) => {
+    const today = new Date();
+    const todayStr = today.toDateString(); // 今天的日期字符串（如 "Wed May 22 2024"）
+
+    // 获取所有相关键（格式：${taskName}-completed:${tokenId}）
+    const relevantKeys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.endsWith(`-completed:${tokenId}`)) { // 精确匹配后缀（避免部分匹配）
+            relevantKeys.push(key);
+        }
+    }
+
+    // 检查并删除过期项（非今天的记录）
+    relevantKeys.forEach(key => {
+        LogUtil.info('删除任务完成标记', key)
+        const savedTime = localStorage.getItem(key);
+        if (!savedTime) {
+            localStorage.removeItem(key); // 清理无效空记录
+            return;
+        }
+
+        let savedDate;
+        try {
+            savedDate = new Date(savedTime);
+            if (isNaN(savedDate.getTime())) throw new Error('无效日期'); // 处理无效日期
+        } catch (e) {
+            LogUtil.warn(`无效日期记录，删除: ${key}`, savedTime);
+            localStorage.removeItem(key);
+            return;
+        }
+
+        // 核心：删除“非今天”的记录（即前一天及更早）
+        if (savedDate.toDateString() !== todayStr) {
+            localStorage.removeItem(key);
+            LogUtil.info(`已清理过期记录: ${key} (保存于 ${savedDate.toLocaleString()})`);
+        }
+    });
+};
 
 const markCompeteToday = (tokenId,taskName) => {
     const key = `${taskName}-completed:${tokenId}`
