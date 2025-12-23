@@ -670,7 +670,7 @@ export default function useDailyTaskExecutor() {
         taskList.push({
             name: '恢复原始阵容',
             execute: async () => {
-                logFn('所有任务完成，正在切回原始阵容...', 'warning')
+                logFn('所有任务完成，正在切回原始阵容...', 'success')
                 await switchBackFormationIfNeeded(tokenId, originalFormation, logFn)
             }
         })
