@@ -33,20 +33,6 @@ const markCompeteToday = (tokenId,taskName) => {
     localStorage.setItem(key, new Date().toISOString())
 }
 
-const switchBackFormationIfNeeded=async (tokenId, originalFormation, logFn) => {
-    //切换回原本阵容
-    if(!originalFormation){
-        originalFormation=1
-    }
-    await switchToFormationIfNeeded(tokenId, originalFormation, '原阵容', logFn)
-
-    const finalCheck = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 5000);
-    const finalFormation = finalCheck?.presetTeamInfo?.useTeamId;
-    if (finalFormation !== originalFormation) {
-        logFn(`🚨 警告：最终阵容 (${finalFormation}) 与原始阵容 (${originalFormation}) 不一致！`, 'error');
-    }
-
-}
 
 export default function useDailyTaskExecutor() {
     const tokenStore = useTokenStore()
@@ -115,6 +101,20 @@ export default function useDailyTaskExecutor() {
             localStorage.setItem(`daily-settings:${tokenId}`, JSON.stringify(configCopy))
         } catch (error) {
             console.error('保存每日任务设置失败:', error)
+        }
+    }
+
+    const switchBackFormationIfNeeded=async (tokenId, originalFormation, logFn) => {
+        //切换回原本阵容
+        if(!originalFormation){
+            originalFormation=1
+        }
+        await switchToFormationIfNeeded(tokenId, originalFormation, '原阵容', logFn)
+
+        const finalCheck = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 5000);
+        const finalFormation = finalCheck?.presetTeamInfo?.useTeamId;
+        if (finalFormation !== originalFormation) {
+            logFn(`🚨 警告：最终阵容 (${finalFormation}) 与原始阵容 (${originalFormation}) 不一致！`, 'error');
         }
     }
     // 智能阵容切换辅助函数
