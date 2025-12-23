@@ -17,6 +17,37 @@ const tasks = ref([
     { id: 13, name: '进行1场竞技场战斗', completed: false, loading: false },
     { id: 14, name: '收获1个任意盐罐', completed: false, loading: false }
 ])
+
+const hasCompeteToday = (tokenId,taskName) => {
+    const key = `${taskName}-completed:${tokenId}`
+    const savedTime = localStorage.getItem(key)
+    if (!savedTime) return false
+
+    const savedDate = new Date(savedTime).toDateString()
+    const today = new Date().toDateString()
+    return savedDate === today
+}
+
+const markCompeteToday = (tokenId,taskName) => {
+    const key = `${taskName}-completed:${tokenId}`
+    localStorage.setItem(key, new Date().toISOString())
+}
+
+const switchBackFormationIfNeeded=async (tokenId, originalFormation, logFn) => {
+    //切换回原本阵容
+    if(!originalFormation){
+        originalFormation=1
+    }
+    await switchToFormationIfNeeded(tokenId, originalFormation, '原阵容', logFn)
+
+    const finalCheck = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 5000);
+    const finalFormation = finalCheck?.presetTeamInfo?.useTeamId;
+    if (finalFormation !== originalFormation) {
+        logFn(`🚨 警告：最终阵容 (${finalFormation}) 与原始阵容 (${originalFormation}) 不一致！`, 'error');
+    }
+
+}
+
 export default function useDailyTaskExecutor() {
     const tokenStore = useTokenStore()
 
@@ -251,214 +282,241 @@ export default function useDailyTaskExecutor() {
         const statistics = roleData.statistics ?? {}
         const statisticsTime = roleData.statisticsTime ?? {}
         const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
-        let currentFormation = teamInfo?.presetTeamInfo?.useTeamId
+        let originalFormation  = teamInfo?.presetTeamInfo?.useTeamId
         logFn('开始执行每日任务补差')
 
         // 构建任务列表
         const taskList = []
 
-        try {
-            // 1. 分享游戏 (任务ID: 2)
-            if (!isTaskCompleted(2)) {
-                taskList.push({
-                    name: '分享一次游戏',
-                    execute: () => executeGameCommand(tokenId, 'system_mysharecallback',
+
+        // 1. 分享游戏 (任务ID: 2)
+        if (!isTaskCompleted(2)&&!hasCompeteToday(tokenId,2)) {
+            taskList.push({
+                name: '分享一次游戏',
+                execute: () => {
+                    executeGameCommand(tokenId, 'system_mysharecallback',
                         { isSkipShareCard: true, type: 2 }, '分享游戏')
-                })
-            }
+                    markCompeteToday(tokenId,2)
+                }
+            })
+        }
 
-            // 2. 赠送好友金币 (任务ID: 3)
-            if (!isTaskCompleted(3)) {
-                taskList.push({
-                    name: '赠送好友金币',
-                    execute: () => executeGameCommand(tokenId, 'friend_batch', {}, '赠送好友金币')
-                })
-            }
+        // 2. 赠送好友金币 (任务ID: 3)
+        if (!isTaskCompleted(3)&&!hasCompeteToday(tokenId,3)) {
+            taskList.push({
+                name: '赠送好友金币',
+                execute: () => {
+                    executeGameCommand(tokenId, 'friend_batch', {}, '赠送好友金币')
+                    markCompeteToday(tokenId,3)
+                }
+            })
+        }
 
-            // 3. 招募 (任务ID: 4)
-            if (!isTaskCompleted(4)) {
+        // 3. 招募 (任务ID: 4)
+        if (!isTaskCompleted(4)) {
+            if(!hasCompeteToday(tokenId,'hero_recruit')){
                 taskList.push({
                     name: '免费招募',
-                    execute: () => executeGameCommand(tokenId, 'hero_recruit',
-                        { recruitType: 3, recruitNumber: 1 }, '免费招募')
+                    execute: () => {
+                        executeGameCommand(tokenId, 'hero_recruit',
+                            { recruitType: 3, recruitNumber: 1 }, '免费招募')
+                        markCompeteToday(tokenId,'hero_recruit')
+                    }
                 })
+            }
 
-                if (settings.payRecruit) {
+
+            if (settings.payRecruit) {
+                if(!hasCompeteToday(tokenId,'hero_recruit_1')){
                     taskList.push({
                         name: '付费招募',
-                        execute: () => executeGameCommand(tokenId, 'hero_recruit',
-                            { recruitType: 1, recruitNumber: 1 }, '付费招募')
+                        execute: () =>{
+                            executeGameCommand(tokenId, 'hero_recruit',
+                                { recruitType: 1, recruitNumber: 1 }, '付费招募')
+                            markCompeteToday(tokenId,'hero_recruit_1')
+                        }
                     })
                 }
             }
+        }
 
-            // 4. 点金 (任务ID: 6)
-            if (!isTaskCompleted(6) && isTodayAvailable(statisticsTime['buy:gold'])) {
-                for (let i = 0; i < 3; i++) {
-                    taskList.push({
-                        name: `免费点金 ${i + 1}/3`,
-                        execute: () => executeGameCommand(tokenId, 'system_buygold',
+        // 4. 点金 (任务ID: 6)
+        if (!isTaskCompleted(6) && isTodayAvailable(statisticsTime['buy:gold']) &&!hasCompeteToday(tokenId,6)) {
+            for (let i = 0; i < 3; i++) {
+                taskList.push({
+                    name: `免费点金 ${i + 1}/3`,
+                    execute: () => {
+                        executeGameCommand(tokenId, 'system_buygold',
                             { buyNum: 1 }, `免费点金 ${i + 1}`)
-                    })
-                }
-            }
-
-            // 5. 挂机奖励 (任务ID: 5)
-            if (!isTaskCompleted(5) && settings.claimHangUp) {
-                for (let i = 0; i < 4; i++) {
-                    taskList.push({
-                        name: `挂机加钟 ${i + 1}/4`,
-                        execute: () => executeGameCommand(tokenId, 'system_mysharecallback',
-                            { isSkipShareCard: true, type: 2 }, `挂机加钟 ${i + 1}`)
-                    })
-                }
-
-                taskList.push({
-                    name: '领取挂机奖励',
-                    execute: () => executeGameCommand(tokenId, 'system_claimhangupreward', {}, '领取挂机奖励')
+                        if(i===2){
+                            markCompeteToday(tokenId,6)
+                        }
+                    }
                 })
+            }
+        }
 
+        // 5. 挂机奖励 (任务ID: 5)
+        if (!isTaskCompleted(5) && settings.claimHangUp) {
+            for (let i = 0; i < 4; i++) {
                 taskList.push({
-                    name: '挂机加钟 5/5',
+                    name: `挂机加钟 ${i + 1}/4`,
                     execute: () => executeGameCommand(tokenId, 'system_mysharecallback',
-                        { isSkipShareCard: true, type: 2 }, '挂机加钟 5')
+                        { isSkipShareCard: true, type: 2 }, `挂机加钟 ${i + 1}`)
                 })
             }
 
-            // 6. 开宝箱 (任务ID: 7)
-            if (!isTaskCompleted(7) && settings.openBox) {
-                const numPerOpen = 10
-                taskList.push({
-                    name: '开启木质宝箱',
-                    execute: () => executeGameCommand(tokenId, 'item_openbox',
-                        { itemId: 2001, number: numPerOpen }, `开启木质宝箱${numPerOpen}个 `)
-                })
-            }
-
-            // 7. 盐罐 (任务ID: 14)
-            if (!isTaskCompleted(14) && settings.claimBottle) {
-                taskList.push({
-                    name: '领取盐罐奖励',
-                    execute: () => executeGameCommand(tokenId, 'bottlehelper_claim', {}, '领取盐罐奖励')
-                })
-            }
-
-
-
-            // 8. 竞技场 (任务ID: 13)
-            if (!isTaskCompleted(13) && settings.arenaEnable) {
-                taskList.push({
-                    name: '竞技场战斗',
-                    execute: async () => {
-                        logFn('开始竞技场战斗流程')
-
-                        if (new Date().getHours() < 8) {
-                            logFn('当前时间未到8点，跳过竞技场战斗', 'warning')
-                            return
-                        }
-
-                        if (new Date().getHours() > 22) {
-                            logFn('当前时间已过22点，跳过竞技场战斗', 'warning')
-                            return
-                        }
-
-                        await switchToFormationIfNeeded(tokenId, settings.arenaFormation, '竞技场阵容', logFn)
-                        //开始竞技场
-                        await executeGameCommand(tokenId, 'arena_startarea', {}, '开始竞技场')
-                        for (let i = 1; i <= 3; i++) {
-                            logFn(`竞技场战斗 ${i}/3`)
-
-
-                            // 获取目标
-                            let targets
-                            try {
-                                targets = await executeGameCommand(tokenId, 'arena_getareatarget',
-                                    {}, `获取竞技场目标${i}`)
-                            } catch (err) {
-                                logFn(`竞技场战斗${i} - 获取对手失败: ${err.message}`, 'error')
-                                break
-                            }
-
-                            const targetId = pickArenaTargetId(targets)
-                            if (targetId) {
-                                await executeGameCommand(tokenId, 'fight_startareaarena',
-                                    { targetId }, `竞技场战斗${i}`, 10000)
-                            } else {
-                                logFn(`竞技场战斗${i} - 未找到目标`, 'warning')
-                            }
-
-                            // 战斗间隔
-                            await new Promise(resolve => setTimeout(resolve, 1000))
-                        }
-                    }
-                })
-            }
-
-            // 9. BOSS战斗
-            if (settings.bossTimes > 0) {
-                let alreadyLegionBoss = statistics['legion:boss'] ?? 0
-                // 如果上次挑战时间不是今天，说明今天还没打过，视为0次
-                if (isTodayAvailable(statisticsTime['legion:boss'])) {
-                    alreadyLegionBoss = 0
-                }
-                const remainingLegionBoss = Math.max(settings.bossTimes - alreadyLegionBoss, 0)
-
-                if (remainingLegionBoss > 0) {
-                    taskList.push({
-                        name: '军团BOSS阵容检查',
-                        execute: () => switchToFormationIfNeeded(tokenId, settings.bossFormation, 'BOSS阵容', logFn)
-                    })
-
-                    for (let i = 0; i < remainingLegionBoss; i++) {
-                        taskList.push({
-                            name: `军团BOSS ${i + 1}/${remainingLegionBoss}`,
-                            execute: () => executeGameCommand(tokenId, 'fight_startlegionboss', {}, `军团BOSS ${i + 1}`, 12000)
-                        })
-                    }
-                }
-
-                // 每日BOSS
-                const todayBossId = getTodayBossId()
-                if (remainingLegionBoss === 0) {
-                    // 如果没有军团BOSS，为每日BOSS切换阵容
-                    taskList.push({
-                        name: '每日BOSS阵容检查',
-                        execute: () => switchToFormationIfNeeded(tokenId, settings.bossFormation, 'BOSS阵容', logFn)
-                    })
-                }
-
-                for (let i = 0; i < 3; i++) {
-                    taskList.push({
-                        name: `每日BOSS ${i + 1}/3`,
-                        execute: () => executeGameCommand(tokenId, 'fight_startboss',
-                            { bossId: todayBossId }, `每日BOSS ${i + 1}`, 12000)
-                    })
-                }
-            }
-
-
-
-            // 10. 固定奖励领取
-            const fixedRewards = [
-                { name: '福利签到', cmd: 'system_signinreward' },
-                { name: '俱乐部', cmd: 'legion_signin' },
-                { name: '领取每日礼包', cmd: 'discount_claimreward' },
-                { name: '领取每日免费奖励', cmd: 'collection_claimfreereward' },
-                { name: '领取免费礼包', cmd: 'card_claimreward' },
-                { name: '领取永久卡礼包', cmd: 'card_claimreward', params: { cardId: 4003 } }
-            ]
-
-            if (settings.claimEmail) {
-                fixedRewards.push({ name: '领取邮件奖励', cmd: 'mail_claimallattachment' })
-            }
-
-            fixedRewards.forEach(reward => {
-                taskList.push({
-                    name: reward.name,
-                    execute: () => executeGameCommand(tokenId, reward.cmd, reward.params || {}, reward.name)
-                })
+            taskList.push({
+                name: '领取挂机奖励',
+                execute: () => executeGameCommand(tokenId, 'system_claimhangupreward', {}, '领取挂机奖励')
             })
 
+            taskList.push({
+                name: '挂机加钟 5/5',
+                execute: () => executeGameCommand(tokenId, 'system_mysharecallback',
+                    { isSkipShareCard: true, type: 2 }, '挂机加钟 5')
+            })
+        }
+
+        // 6. 开宝箱 (任务ID: 7)
+        if (!isTaskCompleted(7) && settings.openBox &&!hasCompeteToday(tokenId,7)) {
+            const numPerOpen = 10
+            taskList.push({
+                name: '开启木质宝箱',
+                execute: () => {
+                    executeGameCommand(tokenId, 'item_openbox',
+                        { itemId: 2001, number: numPerOpen }, `开启木质宝箱${numPerOpen}个 `)
+                    markCompeteToday(tokenId,7)
+                }
+            })
+        }
+
+        // 7. 盐罐 (任务ID: 14)
+        if (!isTaskCompleted(14) && settings.claimBottle) {
+            taskList.push({
+                name: '领取盐罐奖励',
+                execute: () => executeGameCommand(tokenId, 'bottlehelper_claim', {}, '领取盐罐奖励')
+            })
+        }
+
+
+
+        // 8. 竞技场 (任务ID: 13)
+        if (!isTaskCompleted(13) && settings.arenaEnable && !hasCompeteToday(tokenId,13)) {
+            taskList.push({
+                name: '竞技场战斗',
+                execute: async () => {
+                    logFn('开始竞技场战斗流程')
+
+                    if (new Date().getHours() < 8) {
+                        logFn('当前时间未到8点，跳过竞技场战斗', 'warning')
+                        return
+                    }
+
+                    if (new Date().getHours() > 22) {
+                        logFn('当前时间已过22点，跳过竞技场战斗', 'warning')
+                        return
+                    }
+
+                    await switchToFormationIfNeeded(tokenId, settings.arenaFormation, '竞技场阵容', logFn)
+                    //开始竞技场
+                    await executeGameCommand(tokenId, 'arena_startarea', {}, '开始竞技场')
+                    for (let i = 1; i <= 3; i++) {
+                        logFn(`竞技场战斗 ${i}/3`)
+
+
+                        // 获取目标
+                        let targets
+                        try {
+                            targets = await executeGameCommand(tokenId, 'arena_getareatarget',
+                                {}, `获取竞技场目标${i}`)
+                        } catch (err) {
+                            logFn(`竞技场战斗${i} - 获取对手失败: ${err.message}`, 'error')
+                            break
+                        }
+
+                        const targetId = pickArenaTargetId(targets)
+                        if (targetId) {
+                            await executeGameCommand(tokenId, 'fight_startareaarena',
+                                { targetId }, `竞技场战斗${i}`, 10000)
+                        } else {
+                            logFn(`竞技场战斗${i} - 未找到目标`, 'warning')
+                        }
+                        if(i===2){
+                            markCompeteToday(tokenId,13)
+                        }
+                        // 战斗间隔
+                        await new Promise(resolve => setTimeout(resolve, 1000))
+                    }
+                }
+            })
+        }
+
+        // 9. BOSS战斗
+        if (settings.bossTimes > 0 && !hasCompeteToday(tokenId,'legion:boss')) {
+            let alreadyLegionBoss = statistics['legion:boss'] ?? 0
+            // 如果上次挑战时间不是今天，说明今天还没打过，视为0次
+            if (isTodayAvailable(statisticsTime['legion:boss'])) {
+                alreadyLegionBoss = 0
+            }
+            let remainingLegionBoss = Math.max(settings.bossTimes - alreadyLegionBoss, 0)
+            if (remainingLegionBoss > 0) {
+                taskList.push({
+                    name: '军团BOSS阵容检查',
+                    execute: () => switchToFormationIfNeeded(tokenId, settings.bossFormation, 'BOSS阵容', logFn)
+                })
+                remainingLegionBoss = remainingLegionBoss>2?2:remainingLegionBoss;
+                for (let i = 0; i < remainingLegionBoss; i++) {
+                    taskList.push({
+                        name: `军团BOSS ${i + 1}/${remainingLegionBoss}`,
+                        execute: async () => {
+                            executeGameCommand(tokenId, 'fight_startlegionboss', {}, `军团BOSS ${i + 1}`, 12000)
+                            if (i === remainingLegionBoss - 1) {
+                                markCompeteToday(tokenId, 'legion:boss')
+                            }
+                        }
+                    })
+                }
+            }
+        }
+        taskList.push({
+            name: '每日BOSS阵容检查',
+            execute: async () => await switchToFormationIfNeeded(tokenId, settings.bossFormation, 'BOSS阵容', logFn)
+        })
+        // 每日BOSS
+        const todayBossId = getTodayBossId()
+        for (let i = 0; i < 3; i++) {
+            taskList.push({
+                name: `每日BOSS ${i + 1}/3`,
+                execute: async () => {
+                    await executeGameCommand(tokenId, 'fight_startboss',
+                        {bossId: todayBossId}, `每日BOSS ${i + 1}`, 12000)
+                }
+            })
+        }
+
+
+        // 10. 固定奖励领取
+        const fixedRewards = [
+            { name: '福利签到', cmd: 'system_signinreward' },
+            { name: '俱乐部', cmd: 'legion_signin' },
+            { name: '领取每日礼包', cmd: 'discount_claimreward' },
+            { name: '领取每日免费奖励', cmd: 'collection_claimfreereward' },
+            { name: '领取免费礼包', cmd: 'card_claimreward' },
+            { name: '领取永久卡礼包', cmd: 'card_claimreward', params: { cardId: 4003 } }
+        ]
+
+        if (settings.claimEmail) {
+            fixedRewards.push({ name: '领取邮件奖励', cmd: 'mail_claimallattachment' })
+        }
+
+        fixedRewards.forEach(reward => {
+            taskList.push({
+                name: reward.name,
+                execute: () => executeGameCommand(tokenId, reward.cmd, reward.params || {}, reward.name)
+            })
+        })
+        if(!hasCompeteToday(tokenId,'collection_goodslist')){
             // 珍宝阁免费礼包
             taskList.push(
                 {
@@ -469,140 +527,156 @@ export default function useDailyTaskExecutor() {
             taskList.push(
                 {
                     name: '领取珍宝阁免费礼包',
-                    execute: () => executeGameCommand(tokenId, 'collection_claimfreereward', {}, '领取珍宝阁免费礼包')
+                    execute: () =>{
+                        executeGameCommand(tokenId, 'collection_claimfreereward', {}, '领取珍宝阁免费礼包')
+                        markCompeteToday(tokenId,'collection_goodslist')
+                    }
                 }
             )
+        }
 
-            // 11. 免费活动
-            if (isTodayAvailable(statisticsTime['artifact:normal:lottery:time'])) {
-                for (let i = 0; i < 3; i++) {
-                    taskList.push({
-                        name: `免费钓鱼 ${i + 1}/3`,
-                        execute: () => executeGameCommand(tokenId, 'artifact_lottery',
-                            { lotteryNumber: 1, newFree: true, type: 1 }, `免费钓鱼 ${i + 1}`)
-                    })
-                }
-            }
 
-            // 灯神免费扫荡
-            const kingdoms = ['魏国', '蜀国', '吴国', '群雄']
-            for (let gid = 1; gid <= 4; gid++) {
-                if (isTodayAvailable(statisticsTime[`genie:daily:free:${gid}`])) {
-                    taskList.push({
-                        name: `${kingdoms[gid - 1]}灯神免费扫荡`,
-                        execute: () => executeGameCommand(tokenId, 'genie_sweep',
-                            { genieId: gid }, `${kingdoms[gid - 1]}灯神免费扫荡`)
-                    })
-                }
-            }
-
-            // 灯神免费扫荡卷
-            for (let i = 0; i < 3; i++) {
+        // 11. 免费活动
+        if (isTodayAvailable(statisticsTime['artifact:normal:lottery:time']) && !hasCompeteToday(tokenId,'artifact:normal:lottery:time')) {
+            for (let i = 0; i < 2; i++) {
                 taskList.push({
-                    name: `领取免费扫荡卷 ${i + 1}/3`,
-                    execute: () => executeGameCommand(tokenId, 'genie_buysweep', {}, `领取免费扫荡卷 ${i + 1}`)
+                    name: `免费钓鱼 ${i + 1}/3`,
+                    execute: () => {
+                        executeGameCommand(tokenId, 'artifact_lottery',{ lotteryNumber: 1, newFree: true, type: 1 }, `免费钓鱼 ${i + 1}`)
+                    }
                 })
             }
+            taskList.push({
+                name: `免费钓鱼 3/3`,
+                execute: () => {
+                    executeGameCommand(tokenId, 'artifact_lottery',{ lotteryNumber: 1, newFree: true, type: 1 }, `免费钓鱼 3`)
+                    markCompeteToday(tokenId,'artifact:normal:lottery:time')
+                }
+            })
+        }
 
-            // 12. 黑市购买任务 (任务ID: 12)
+        // 灯神免费扫荡
+        const kingdoms = ['魏国', '蜀国', '吴国', '群雄']
+        for (let gid = 1; gid <= 4; gid++) {
+            if (isTodayAvailable(statisticsTime[`genie:daily:free:${gid}`])) {
+                if(!hasCompeteToday(tokenId,`genie:daily:free:${gid}`)){
+                    taskList.push({
+                        name: `${kingdoms[gid - 1]}灯神免费扫荡`,
+                        execute: () => {
+                            executeGameCommand(tokenId, 'genie_sweep',{ genieId: gid }, `${kingdoms[gid - 1]}灯神免费扫荡`)
+                            markCompeteToday(tokenId,`genie:daily:free:${gid}`)
+                        }
+                    })
+                }
+            }
+        }
+        // 灯神免费扫荡卷
+        for (let i = 0; i < 3; i++) {
+            if(!hasCompeteToday(tokenId,`genie_buysweep:${i}`)){
+                taskList.push({
+                    name: `领取免费扫荡卷 ${i + 1}/3`,
+                    execute: () => {
+                        executeGameCommand(tokenId, 'genie_buysweep', {}, `领取免费扫荡卷 ${i + 1}`)
+                        markCompeteToday(tokenId,`genie_buysweep:${i}`)
+                    }
+                })
+            }
+        }
+
+        // 12. 黑市购买任务 (任务ID: 12)
+        if(!hasCompeteToday(tokenId,12)){
             if (!isTaskCompleted(12) && settings.blackMarketPurchase) {
                 taskList.push({
                     name: '黑市购买1次物品',
-                    execute: () => executeGameCommand(tokenId, 'store_purchase', { goodsId: 1 }, '黑市购买1次物品')
+                    execute: () =>{
+                        executeGameCommand(tokenId, 'store_purchase', { goodsId: 1 }, '黑市购买1次物品')
+                        markCompeteToday(tokenId,12)
+                    }
                 })
             }
-
-            // 咸王梦境领取
-            const mengyandayOfWeek = new Date().getDay()
-            if (mengyandayOfWeek === 0 || mengyandayOfWeek === 1 || mengyandayOfWeek === 3 || mengyandayOfWeek === 4) {
-                const mjbattleTeam = { "0": 107 }
-                taskList.push({
-                    name: '咸王梦境',
-                    execute: () => executeGameCommand(tokenId, 'dungeon_selecthero', { battleTeam: mjbattleTeam }, '咸王梦境')
-                })
-            }
-            // 深海灯神领取
-            if (mengyandayOfWeek === 1 && isTodayAvailable(statisticsTime[`genie:daily:free:5`])) {
-                taskList.push({
-                    name: '深海灯神',
-                    execute: () => executeGameCommand(tokenId, 'genie_sweep', { genieId: 5, sweepCnt: 1 }, '深海灯神')
-                })
-            }
-            // 13. 任务奖励领取
-            for (let taskId = 1; taskId <= 10; taskId++) {
-                taskList.push({
-                    name: `领取任务奖励${taskId}`,
-                    execute: () => executeGameCommand(tokenId, 'task_claimdailypoint',
-                        { taskId }, `领取任务奖励${taskId}`, 5000)
-                })
-            }
-
-            // 日常和周常奖励
-            taskList.push(
-                {
-                    name: '领取日常任务奖励',
-                    execute: () => executeGameCommand(tokenId, 'task_claimdailyreward', {}, '领取日常任务奖励')
-                },
-                {
-                    name: '领取周常任务奖励',
-                    execute: () => executeGameCommand(tokenId, 'task_claimweekreward', {}, '领取周常任务奖励')
-                }
-            )
-
-            // 执行任务列表
-            const totalTasks = taskList.length
-            logFn(`共有 ${totalTasks} 个任务待执行`)
-
-            for (let i = 0; i < taskList.length; i++) {
-                const task = taskList[i]
-
-                try {
-                    await task.execute()
-
-                    // 更新进度
-                    const progress = Math.floor(((i + 1) / totalTasks) * 100)
-                    if (progressFn) progressFn(tokenId, progress)
-
-                    // 任务间隔
-                    await new Promise(resolve => setTimeout(resolve, 500))
-
-                } catch (error) {
-                    logFn(`任务执行失败: ${task.name} - ${error.message}`, 'error')
-                    // 继续执行下一个任务
-                }
-            }
-
-            // 确保进度为100%
-            if (progressFn) progressFn(tokenId, 100)
-            logFn('所有任务执行完成', 'success')
-        }finally {
-            //切换回原本阵容
-            if(!currentFormation){
-                currentFormation=1
-            }
-            await switchToFormationIfNeeded(tokenId, currentFormation, '原阵容', logFn)
         }
 
-        //答题
-        // 获取当前星期几（0=周日，1=周一...6=周六）
-        const answerDateOfWeek = new Date().getDay()
-        const currentHour = new Date().getHours()
 
-        const isRightWeekday = answerDateOfWeek === 1 || answerDateOfWeek === 2 || answerDateOfWeek === 4
-        const isRightTime = currentHour >= 11 && currentHour <= 20
-        if (isRightWeekday && isRightTime) {
+        // 咸王梦境领取
+        const mengyandayOfWeek = new Date().getDay()
+        if (mengyandayOfWeek === 0 || mengyandayOfWeek === 1 || mengyandayOfWeek === 3 || mengyandayOfWeek === 4) {
+            const mjbattleTeam = { "0": 107 }
+            taskList.push({
+                name: '咸王梦境',
+                execute: () => executeGameCommand(tokenId, 'dungeon_selecthero', { battleTeam: mjbattleTeam }, '咸王梦境')
+            })
+        }
+        // 深海灯神领取
+        if (mengyandayOfWeek === 1 && isTodayAvailable(statisticsTime[`genie:daily:free:5`])) {
+            taskList.push({
+                name: '深海灯神',
+                execute: () => executeGameCommand(tokenId, 'genie_sweep', { genieId: 5, sweepCnt: 1 }, '深海灯神')
+            })
+        }
+        // 13. 任务奖励领取
+        for (let taskId = 1; taskId <= 10; taskId++) {
+            taskList.push({
+                name: `领取任务奖励${taskId}`,
+                execute: () => executeGameCommand(tokenId, 'task_claimdailypoint',
+                    { taskId }, `领取任务奖励${taskId}`, 5000)
+            })
+        }
+
+        // 日常和周常奖励
+        taskList.push(
+            {
+                name: '领取日常任务奖励',
+                execute: () => executeGameCommand(tokenId, 'task_claimdailyreward', {}, '领取日常任务奖励')
+            },
+            {
+                name: '领取周常任务奖励',
+                execute: () => executeGameCommand(tokenId, 'task_claimweekreward', {}, '领取周常任务奖励')
+            }
+        )
+        taskList.push({
+            name: '恢复原始阵容',
+            execute: async () => {
+                logFn('🔚 所有任务完成，正在切回原始阵容...')
+                await switchBackFormationIfNeeded(tokenId, originalFormation, logFn)
+            }
+        })
+        // 执行任务列表
+        const totalTasks = taskList.length
+        logFn(`共有 ${totalTasks} 个任务待执行`)
+
+        for (let i = 0; i < taskList.length; i++) {
+            const task = taskList[i]
+
+            try {
+                await task.execute()
+
+                // 更新进度
+                const progress = Math.floor(((i + 1) / totalTasks) * 100)
+                if (progressFn) progressFn(tokenId, progress)
+
+                // 任务间隔
+                await new Promise(resolve => setTimeout(resolve, 500))
+
+            } catch (error) {
+                logFn(`任务执行失败: ${task.name} - ${error.message}`, 'error')
+                // 继续执行下一个任务
+            }
+        }
+
+        // 确保进度为100%
+        if (progressFn) progressFn(tokenId, 100)
+        logFn('所有任务执行完成', 'success')
+
+        //答题
+        if(!hasCompeteToday(tokenId,'answer_test')){
             await preloadQuestions()
             tokenStore.sendMessage(tokenId, 'study_startgame')
             logFn(`[${tokenId}] 触发答题，等待8秒，防止多账号串题`, 'info')
             await new Promise(resolve => setTimeout(resolve, 8000))
             logFn(`[${tokenId}] 答题等待结束`, 'success')
+            markCompeteToday(tokenId,'answer_test')
         } else {
-            // 可选：补充日志，说明跳过原因
-            if (!isRightWeekday) {
-                logFn(`[${tokenId}] 当前星期${answerDateOfWeek}，非周一/周二/周四，跳过答题逻辑`, 'warning')
-            } else if (!isRightTime) {
-                logFn(`[${tokenId}] 当前时间${currentHour}点，不在8:00-20:00范围内，跳过答题逻辑`, 'warning')
-            }
+            logFn(`[${tokenId}] 今天已答题，跳过答题逻辑`, 'warning')
             // 最后刷新一次角色信息
             await new Promise(resolve => setTimeout(resolve, 2000))
         }
