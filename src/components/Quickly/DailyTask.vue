@@ -599,9 +599,9 @@ const startTask = async () => {
   // 启动任务管理器
   startDailyTask(true)
   // 如果需要立即执行
-  if (config.shouldExecuteNow) {
-    await executeAllTokensNow()
-  }
+  // if (config.shouldExecuteNow) {
+  //   await executeAllTokensNow()
+  // }
   // 更新下次执行时间显示
   updateNextExecuteTimeDisplay()
 

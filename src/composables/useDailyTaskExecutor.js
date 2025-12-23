@@ -26,6 +26,7 @@ const hasCompeteToday = (tokenId,taskName) => {
     const savedDate = new Date(savedTime).toDateString()
     const today = new Date().toDateString()
     return savedDate === today
+    // return false
 }
 
 const markCompeteToday = (tokenId,taskName) => {
@@ -250,17 +251,12 @@ export default function useDailyTaskExecutor() {
                     completedCount++
                 }
 
-                LogUtil.info(`任务${id} "${tasks.value[idx].name}": ${isCompleted ? '已完成' : '未完成'}`,
-                    isCompleted ? 'success' : 'info')
+                LogUtil.info(`任务${id} "${tasks.value[idx].name}": ${isCompleted ? '已完成' : '未完成'}`)
             } else {
-                LogUtil.info(`服务器返回未知任务ID: ${id} (完成值: ${complete[k]})`, 'warning')
+                LogUtil.info(`服务器返回未知任务ID: ${id} (完成值: ${complete[k]})`)
             }
         })
-
-
-
         LogUtil.info(`任务状态同步完成: ${completedCount}/${syncedCount} 已完成`)
-        // LogUtil.info(`当前进度: ${roleDailyPoint.value}/100`)
     }
     // 通用的每日任务执行器
     const executeDailyTasks = async (params) => {
@@ -271,8 +267,8 @@ export default function useDailyTaskExecutor() {
             logFn,             // 必需：日志函数 (message, type?)
             progressFn         // 可选：进度回调函数 (tokenId, progress)
         } = params
-        LogUtil.info(`tokenId: ${JSON.stringify(tokenId)}`);
-        LogUtil.info(`roleInfo: ${JSON.stringify(roleInfo)}`);
+        LogUtil.info(`tokenId: ${tokenId}`);
+        // LogUtil.info(`roleInfo: ${JSON.stringify(roleInfo)}`);
         LogUtil.info(`settings: ${JSON.stringify(settings)}`);
         const roleData = roleInfo?.role
         if (!roleData) throw new Error('角色数据不存在')
@@ -324,8 +320,6 @@ export default function useDailyTaskExecutor() {
                     }
                 })
             }
-
-
             if (settings.payRecruit) {
                 if(!hasCompeteToday(tokenId,'hero_recruit_1')){
                     taskList.push({
@@ -596,7 +590,6 @@ export default function useDailyTaskExecutor() {
             }
         }
 
-
         // 咸王梦境领取
         const mengyandayOfWeek = new Date().getDay()
         if (mengyandayOfWeek === 0 || mengyandayOfWeek === 1 || mengyandayOfWeek === 3 || mengyandayOfWeek === 4) {
@@ -636,15 +629,15 @@ export default function useDailyTaskExecutor() {
         taskList.push({
             name: '恢复原始阵容',
             execute: async () => {
-                logFn('🔚 所有任务完成，正在切回原始阵容...')
+                logFn('所有任务完成，正在切回原始阵容...', 'warning')
                 await switchBackFormationIfNeeded(tokenId, originalFormation, logFn)
             }
         })
         // 执行任务列表
         const totalTasks = taskList.length
-        logFn(`共有 ${totalTasks} 个任务待执行`)
+        logFn(`共有 ${totalTasks-1} 个任务待执行`)
 
-        for (let i = 0; i < taskList.length; i++) {
+        for (let i = 0; i < totalTasks; i++) {
             const task = taskList[i]
 
             try {
@@ -654,9 +647,10 @@ export default function useDailyTaskExecutor() {
                 const progress = Math.floor(((i + 1) / totalTasks) * 100)
                 if (progressFn) progressFn(tokenId, progress)
 
-                // 任务间隔
-                await new Promise(resolve => setTimeout(resolve, 500))
-
+                if(i<totalTasks -1){
+                    // 任务间隔
+                    await new Promise(resolve => setTimeout(resolve, 500))
+                }
             } catch (error) {
                 logFn(`任务执行失败: ${task.name} - ${error.message}`, 'error')
                 // 继续执行下一个任务
@@ -685,6 +679,10 @@ export default function useDailyTaskExecutor() {
 
     // 执行单个账号的每日任务（供DailyTask.vue使用）
     const executeDailyBusiness = async (token) => {
+        const key = `daily-TASK:${token.id}`
+        const taskRun = localStorage.getItem(key)
+        if (taskRun) return
+        localStorage.setItem(key, new Date().toISOString())
         let wsStatus = tokenStore.getWebSocketStatus(token.id)
         if (wsStatus === 'connected') {
             LogUtil.debug(`${token.name} WebSocket 已连接，跳过`)
@@ -749,6 +747,8 @@ export default function useDailyTaskExecutor() {
             const errorMsg = `${token.name} 每日任务执行失败: ${error.message}`
             logFn(errorMsg, 'error')
             return { success: false, messages }
+        }finally {
+            localStorage.removeItem(key)
         }
     }
 
