@@ -368,7 +368,7 @@ const getTowerInfo = async (tokenId, tokenName, logFn, timeoutMs = 8000) => {
           (initialEnergy == null && currentTower.energy != null) ;
 
       if (hasUpdated) {
-        logFn(`[${tokenName}] 塔信息已更新：体力=${currentTower.energy || 0}, 层数=${currentTower || '未知'}`);
+        logFn(`[${tokenName}] 塔信息已更新：体力=${currentTower.energy || 0}, 层数=${JSON.stringify(currentTower) || '未知'}`);
         return currentTower;
       }
     }
