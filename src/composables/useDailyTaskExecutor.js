@@ -3,7 +3,13 @@ import { ref } from 'vue'
 import { useTokenStore } from '@/stores/tokenStore'
 import LogUtil from "@/utils/LogUtil.js";
 import {preloadQuestions} from "@/utils/studyQuestionsFromJSON.js";
-
+import {
+    switchToFormationIfNeeded,
+    executeGameCommand,
+    refreshRoleInfo,
+    hasCompeteToday,
+    markCompeteToday
+} from '@/utils/CommonUtil.js';
 // 每日任务列表
 const tasks = ref([
     { id: 1, name: '登录一次游戏', completed: false, loading: false },
@@ -17,64 +23,6 @@ const tasks = ref([
     { id: 13, name: '进行1场竞技场战斗', completed: false, loading: false },
     { id: 14, name: '收获1个任意盐罐', completed: false, loading: false }
 ])
-// 辅助函数：格式化日期为 yyyyMMdd
-const formatDateToYMD = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}${month}${day}`;
-};
-
-const hasCompeteToday = (tokenId, taskName) => {
-    const today = new Date();
-    const yyyMMdd = formatDateToYMD(today);
-    const key = `dailytask-${taskName}-${tokenId}-${yyyMMdd}`;
-
-    // 清理过期数据（删除所有非今天的记录）
-    try {
-        cleanExpiredCompletionRecords(tokenId, taskName, yyyMMdd);
-    } catch (e) {
-        console.error('清理过期记录失败:', e);
-    }
-
-    // 检查今天的key是否存在且值为true
-    return localStorage.getItem(key) === 'true';
-}
-
-// 修改后的清理方法
-const cleanExpiredCompletionRecords = (tokenId, taskName, todayYmd) => {
-    // 构建当前有效的key
-    const currentKey = `dailytask-${taskName}-${tokenId}-${todayYmd}`;
-
-    // 获取所有相关键（格式：dailytask-${taskName}-${tokenId}-*）
-    const relevantKeys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(`dailytask-${taskName}-${tokenId}-`)) {
-            relevantKeys.push(key);
-        }
-    }
-
-    // 检查并删除过期项（非今天的记录）
-    relevantKeys.forEach(key => {
-        // 跳过当前有效的key
-        if (key === currentKey) return;
-
-        LogUtil.info('删除任务完成标记', key);
-        localStorage.removeItem(key);
-        LogUtil.info(`已清理过期记录: ${key}`);
-    });
-};
-
-// 修改markCompeteToday函数以匹配新的key格式
-const markCompeteToday = (tokenId, taskName) => {
-    const today = new Date();
-    const yyyMMdd = formatDateToYMD(today);
-    const key = `dailytask-${taskName}-${tokenId}-${yyyMMdd}`;
-    localStorage.setItem(key, 'true');
-    LogUtil.info(`标记任务完成: ${key}`);
-};
-
 
 export default function useDailyTaskExecutor() {
     const tokenStore = useTokenStore()
@@ -146,56 +94,56 @@ export default function useDailyTaskExecutor() {
         }
     }
 
-    const switchBackFormationIfNeeded=async (tokenId, originalFormation, logFn) => {
-        //切换回原本阵容
-        if(!originalFormation){
-            originalFormation=1
-        }
-        await switchToFormationIfNeeded(tokenId, originalFormation, '原阵容', logFn)
-
-        const finalCheck = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 5000);
-        const finalFormation = finalCheck?.presetTeamInfo?.useTeamId;
-        if (finalFormation !== originalFormation) {
-            logFn(`🚨 警告：最终阵容 (${finalFormation}) 与原始阵容 (${originalFormation}) 不一致！`, 'error');
-        }
-    }
-    // 智能阵容切换辅助函数
-    const switchToFormationIfNeeded = async (tokenId, targetFormation, formationName, logFn) => {
-        try {
-            const cachedTeamInfo = tokenStore.gameData?.presetTeam?.presetTeamInfo
-            let currentFormation = cachedTeamInfo?.useTeamId
-
-            if (currentFormation) {
-                logFn(`从缓存获取当前阵容: ${currentFormation}`)
-            } else {
-                logFn(`缓存中无阵容信息，从服务器获取...`)
-                const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
-                currentFormation = teamInfo?.presetTeamInfo?.useTeamId
-                logFn(`从服务器获取当前阵容: ${currentFormation}`)
-            }
-
-            if (currentFormation === targetFormation) {
-                logFn(`当前已是${formationName}${targetFormation}，无需切换`, 'success')
-                return false
-            }
-
-            logFn(`当前阵容: ${currentFormation}, 目标阵容: ${targetFormation}，开始切换...`)
-            await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam',
-                { teamId: targetFormation }, 8000)
-            logFn(`成功切换到${formationName}${targetFormation}`, 'success')
-            return true
-        } catch (error) {
-            logFn(`阵容检查失败，直接切换: ${error.message}`, 'warning')
-            try {
-                await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam',
-                    { teamId: targetFormation }, 8000)
-                return true
-            } catch (fallbackError) {
-                logFn(`强制切换也失败: ${fallbackError.message}`, 'error')
-                throw fallbackError
-            }
-        }
-    }
+    // const switchBackFormationIfNeeded=async (tokenId, originalFormation, logFn) => {
+    //     //切换回原本阵容
+    //     if(!originalFormation){
+    //         originalFormation=1
+    //     }
+    //     await switchToFormationIfNeeded(tokenId, originalFormation, '原阵容', logFn)
+    //
+    //     const finalCheck = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 5000);
+    //     const finalFormation = finalCheck?.presetTeamInfo?.useTeamId;
+    //     if (finalFormation !== originalFormation) {
+    //         logFn(`🚨 警告：最终阵容 (${finalFormation}) 与原始阵容 (${originalFormation}) 不一致！`, 'error');
+    //     }
+    // }
+    // // 智能阵容切换辅助函数
+    // const switchToFormationIfNeeded = async (tokenId, targetFormation, formationName, logFn) => {
+    //     try {
+    //         const cachedTeamInfo = tokenStore.gameData?.presetTeam?.presetTeamInfo
+    //         let currentFormation = cachedTeamInfo?.useTeamId
+    //
+    //         if (currentFormation) {
+    //             logFn(`从缓存获取当前阵容: ${currentFormation}`)
+    //         } else {
+    //             logFn(`缓存中无阵容信息，从服务器获取...`)
+    //             const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
+    //             currentFormation = teamInfo?.presetTeamInfo?.useTeamId
+    //             logFn(`从服务器获取当前阵容: ${currentFormation}`)
+    //         }
+    //
+    //         if (currentFormation === targetFormation) {
+    //             logFn(`当前已是${formationName}${targetFormation}，无需切换`, 'success')
+    //             return false
+    //         }
+    //
+    //         logFn(`当前阵容: ${currentFormation}, 目标阵容: ${targetFormation}，开始切换...`)
+    //         await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam',
+    //             { teamId: targetFormation }, 8000)
+    //         logFn(`成功切换到${formationName}${targetFormation}`, 'success')
+    //         return true
+    //     } catch (error) {
+    //         logFn(`阵容检查失败，直接切换: ${error.message}`, 'warning')
+    //         try {
+    //             await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam',
+    //                 { teamId: targetFormation }, 8000)
+    //             return true
+    //         } catch (fallbackError) {
+    //             logFn(`强制切换也失败: ${fallbackError.message}`, 'error')
+    //             throw fallbackError
+    //         }
+    //     }
+    // }
 
     // 检查是否今日可用
     const isTodayAvailable = (statisticsTime) => {
@@ -211,20 +159,20 @@ export default function useDailyTaskExecutor() {
         const dayOfWeek = new Date().getDay()
         return DAY_BOSS_MAP[dayOfWeek]
     }
-    const executeGameCommand = async (tokenId, cmd, params = {}, description = '', timeout = 8000) => {
-        try {
-            if (description) LogUtil.info(`执行: ${description}`)
-
-            const result = await tokenStore.sendMessageWithPromise(tokenId, cmd, params, timeout)
-            // 让指令等待一点时间
-            await new Promise(resolve => setTimeout(resolve, 500))
-            if (description) LogUtil.info(`${description} - 成功`, 'success')
-            return result
-        } catch (error) {
-            if (description) LogUtil.info(`${description} - 失败: ${error.message}`, 'error')
-            throw error
-        }
-    }
+    // const executeGameCommand = async (tokenId, cmd, params = {}, description = '', timeout = 8000) => {
+    //     try {
+    //         if (description) LogUtil.info(`执行: ${description}`)
+    //
+    //         const result = await tokenStore.sendMessageWithPromise(tokenId, cmd, params, timeout)
+    //         // 让指令等待一点时间
+    //         await new Promise(resolve => setTimeout(resolve, 500))
+    //         if (description) LogUtil.info(`${description} - 成功`, 'success')
+    //         return result
+    //     } catch (error) {
+    //         if (description) LogUtil.info(`${description} - 失败: ${error.message}`, 'error')
+    //         throw error
+    //     }
+    // }
     const pickArenaTargetId = (targets) => {
         const candidate =
             targets?.rankList?.[0] ||
@@ -239,23 +187,23 @@ export default function useDailyTaskExecutor() {
     }
 
     // 刷新角色信息
-    const refreshRoleInfo = async (tokenId) => {
-        LogUtil.info('正在获取角色信息...')
-
-        try {
-            const response = await tokenStore.sendGetRoleInfo(tokenId)
-            LogUtil.info('角色信息获取成功', 'success')
-
-            // 同步任务状态
-            if (response) {
-                syncCompleteFromServer(response)
-            }
-            return response
-        } catch (error) {
-            LogUtil.info(`获取角色信息失败: ${error.message}`, 'error')
-            throw error
-        }
-    }
+    // const refreshRoleInfo = async (tokenId) => {
+    //     LogUtil.info('正在获取角色信息...')
+    //
+    //     try {
+    //         const response = await tokenStore.sendGetRoleInfo(tokenId)
+    //         LogUtil.info('角色信息获取成功', 'success')
+    //
+    //         // 同步任务状态
+    //         if (response) {
+    //             syncCompleteFromServer(response)
+    //         }
+    //         return response
+    //     } catch (error) {
+    //         LogUtil.info(`获取角色信息失败: ${error.message}`, 'error')
+    //         throw error
+    //     }
+    // }
 
     // 同步服务器任务完成状态
     const syncCompleteFromServer = (resp) => {
@@ -318,22 +266,22 @@ export default function useDailyTaskExecutor() {
         const isTaskCompleted = (taskId) => completedTasks[taskId] === -1
         const statistics = roleData.statistics ?? {}
         const statisticsTime = roleData.statisticsTime ?? {}
-        const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
+        // const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
+        const teamInfo =  await executeGameCommand(tokenId, 'presetteam_getinfo', {}, '获取阵容信息',8000);
         let originalFormation  = teamInfo?.presetTeamInfo?.useTeamId
         logFn('开始执行每日任务补差')
 
         // 构建任务列表
         const taskList = []
 
-
         // 1. 分享游戏 (任务ID: 2)
         if (!isTaskCompleted(2)&&!hasCompeteToday(tokenId,2)) {
             taskList.push({
                 name: '分享一次游戏',
-                execute: () => {
-                    executeGameCommand(tokenId, 'system_mysharecallback',
-                        { isSkipShareCard: true, type: 2 }, '分享游戏')
-                    markCompeteToday(tokenId,2)
+                execute: async () => {
+                    await executeGameCommand(tokenId, 'system_mysharecallback',
+                        {isSkipShareCard: true, type: 2}, '分享游戏')
+                    markCompeteToday(tokenId, 2)
                 }
             })
         }
@@ -342,9 +290,9 @@ export default function useDailyTaskExecutor() {
         if (!isTaskCompleted(3)&&!hasCompeteToday(tokenId,3)) {
             taskList.push({
                 name: '赠送好友金币',
-                execute: () => {
-                    executeGameCommand(tokenId, 'friend_batch', {}, '赠送好友金币')
-                    markCompeteToday(tokenId,3)
+                execute: async () => {
+                    await executeGameCommand(tokenId, 'friend_batch', {}, '赠送好友金币')
+                    markCompeteToday(tokenId, 3)
                 }
             })
         }
@@ -354,10 +302,10 @@ export default function useDailyTaskExecutor() {
             if(!hasCompeteToday(tokenId,'hero_recruit')){
                 taskList.push({
                     name: '免费招募',
-                    execute: () => {
-                        executeGameCommand(tokenId, 'hero_recruit',
-                            { recruitType: 3, recruitNumber: 1 }, '免费招募')
-                        markCompeteToday(tokenId,'hero_recruit')
+                    execute: async () => {
+                        await executeGameCommand(tokenId, 'hero_recruit',
+                            {recruitType: 3, recruitNumber: 1}, '免费招募')
+                        markCompeteToday(tokenId, 'hero_recruit')
                     }
                 })
             }
@@ -365,10 +313,10 @@ export default function useDailyTaskExecutor() {
                 if(!hasCompeteToday(tokenId,'hero_recruit_1')){
                     taskList.push({
                         name: '付费招募',
-                        execute: () =>{
-                            executeGameCommand(tokenId, 'hero_recruit',
-                                { recruitType: 1, recruitNumber: 1 }, '付费招募')
-                            markCompeteToday(tokenId,'hero_recruit_1')
+                        execute: async () => {
+                            await executeGameCommand(tokenId, 'hero_recruit',
+                                {recruitType: 1, recruitNumber: 1}, '付费招募')
+                            markCompeteToday(tokenId, 'hero_recruit_1')
                         }
                     })
                 }
@@ -380,11 +328,11 @@ export default function useDailyTaskExecutor() {
             for (let i = 0; i < 3; i++) {
                 taskList.push({
                     name: `免费点金 ${i + 1}/3`,
-                    execute: () => {
-                        executeGameCommand(tokenId, 'system_buygold',
-                            { buyNum: 1 }, `免费点金 ${i + 1}`)
-                        if(i===2){
-                            markCompeteToday(tokenId,6)
+                    execute: async () => {
+                        await executeGameCommand(tokenId, 'system_buygold',
+                            {buyNum: 1}, `免费点金 ${i + 1}`)
+                        if (i === 2) {
+                            markCompeteToday(tokenId, 6)
                         }
                     }
                 })
@@ -396,20 +344,20 @@ export default function useDailyTaskExecutor() {
             for (let i = 0; i < 4; i++) {
                 taskList.push({
                     name: `挂机加钟 ${i + 1}/4`,
-                    execute: () => executeGameCommand(tokenId, 'system_mysharecallback',
-                        { isSkipShareCard: true, type: 2 }, `挂机加钟 ${i + 1}`)
+                    execute: async () => await executeGameCommand(tokenId, 'system_mysharecallback',
+                        {isSkipShareCard: true, type: 2}, `挂机加钟 ${i + 1}`)
                 })
             }
 
             taskList.push({
                 name: '领取挂机奖励',
-                execute: () => executeGameCommand(tokenId, 'system_claimhangupreward', {}, '领取挂机奖励')
+                execute: async () => await executeGameCommand(tokenId, 'system_claimhangupreward', {}, '领取挂机奖励')
             })
 
             taskList.push({
                 name: '挂机加钟 5/5',
-                execute: () => executeGameCommand(tokenId, 'system_mysharecallback',
-                    { isSkipShareCard: true, type: 2 }, '挂机加钟 5')
+                execute: async () => await executeGameCommand(tokenId, 'system_mysharecallback',
+                    {isSkipShareCard: true, type: 2}, '挂机加钟 5')
             })
         }
 
@@ -418,10 +366,10 @@ export default function useDailyTaskExecutor() {
             const numPerOpen = 10
             taskList.push({
                 name: '开启木质宝箱',
-                execute: () => {
-                    executeGameCommand(tokenId, 'item_openbox',
-                        { itemId: 2001, number: numPerOpen }, `开启木质宝箱${numPerOpen}个 `)
-                    markCompeteToday(tokenId,7)
+                execute: async () => {
+                    await executeGameCommand(tokenId, 'item_openbox',
+                        {itemId: 2001, number: numPerOpen}, `开启木质宝箱${numPerOpen}个 `)
+                    markCompeteToday(tokenId, 7)
                 }
             })
         }
@@ -430,11 +378,9 @@ export default function useDailyTaskExecutor() {
         if (!isTaskCompleted(14) && settings.claimBottle) {
             taskList.push({
                 name: '领取盐罐奖励',
-                execute: () => executeGameCommand(tokenId, 'bottlehelper_claim', {}, '领取盐罐奖励')
+                execute: async () => await executeGameCommand(tokenId, 'bottlehelper_claim', {}, '领取盐罐奖励')
             })
         }
-
-
 
         // 8. 竞技场 (任务ID: 13)
         if (!isTaskCompleted(13) && settings.arenaEnable && !hasCompeteToday(tokenId,13)) {
@@ -505,7 +451,7 @@ export default function useDailyTaskExecutor() {
                     taskList.push({
                         name: `军团BOSS ${i + 1}/${remainingLegionBoss}`,
                         execute: async () => {
-                            executeGameCommand(tokenId, 'fight_startlegionboss', {}, `军团BOSS ${i + 1}`, 12000)
+                            await executeGameCommand(tokenId, 'fight_startlegionboss', {}, `军团BOSS ${i + 1}`, 12000)
                             if (i === remainingLegionBoss - 1) {
                                 markCompeteToday(tokenId, 'legion:boss')
                             }
@@ -548,7 +494,7 @@ export default function useDailyTaskExecutor() {
         fixedRewards.forEach(reward => {
             taskList.push({
                 name: reward.name,
-                execute: () => executeGameCommand(tokenId, reward.cmd, reward.params || {}, reward.name)
+                execute: async () => await executeGameCommand(tokenId, reward.cmd, reward.params || {}, reward.name)
             })
         })
         if(!hasCompeteToday(tokenId,'collection_goodslist')){
@@ -556,15 +502,15 @@ export default function useDailyTaskExecutor() {
             taskList.push(
                 {
                     name: '开始领取珍宝阁礼包',
-                    execute: () => executeGameCommand(tokenId, 'collection_goodslist', {}, '开始领取珍宝阁礼包')
+                    execute: async () => await executeGameCommand(tokenId, 'collection_goodslist', {}, '开始领取珍宝阁礼包')
                 }
             )
             taskList.push(
                 {
                     name: '领取珍宝阁免费礼包',
-                    execute: () =>{
-                        executeGameCommand(tokenId, 'collection_claimfreereward', {}, '领取珍宝阁免费礼包')
-                        markCompeteToday(tokenId,'collection_goodslist')
+                    execute: async () => {
+                        await executeGameCommand(tokenId, 'collection_claimfreereward', {}, '领取珍宝阁免费礼包')
+                        markCompeteToday(tokenId, 'collection_goodslist')
                     }
                 }
             )
@@ -576,16 +522,24 @@ export default function useDailyTaskExecutor() {
             for (let i = 0; i < 2; i++) {
                 taskList.push({
                     name: `免费钓鱼 ${i + 1}/3`,
-                    execute: () => {
-                        executeGameCommand(tokenId, 'artifact_lottery',{ lotteryNumber: 1, newFree: true, type: 1 }, `免费钓鱼 ${i + 1}`)
+                    execute: async () => {
+                        await executeGameCommand(tokenId, 'artifact_lottery', {
+                            lotteryNumber: 1,
+                            newFree: true,
+                            type: 1
+                        }, `免费钓鱼 ${i + 1}`)
                     }
                 })
             }
             taskList.push({
                 name: `免费钓鱼 3/3`,
-                execute: () => {
-                    executeGameCommand(tokenId, 'artifact_lottery',{ lotteryNumber: 1, newFree: true, type: 1 }, `免费钓鱼 3`)
-                    markCompeteToday(tokenId,'artifact:normal:lottery:time')
+                execute: async () => {
+                    await executeGameCommand(tokenId, 'artifact_lottery', {
+                        lotteryNumber: 1,
+                        newFree: true,
+                        type: 1
+                    }, `免费钓鱼 3`)
+                    markCompeteToday(tokenId, 'artifact:normal:lottery:time')
                 }
             })
         }
@@ -597,9 +551,9 @@ export default function useDailyTaskExecutor() {
                 if(!hasCompeteToday(tokenId,`genie:daily:free:${gid}`)){
                     taskList.push({
                         name: `${kingdoms[gid - 1]}灯神免费扫荡`,
-                        execute: () => {
-                            executeGameCommand(tokenId, 'genie_sweep',{ genieId: gid }, `${kingdoms[gid - 1]}灯神免费扫荡`)
-                            markCompeteToday(tokenId,`genie:daily:free:${gid}`)
+                        execute: async () => {
+                            await executeGameCommand(tokenId, 'genie_sweep', {genieId: gid}, `${kingdoms[gid - 1]}灯神免费扫荡`)
+                            markCompeteToday(tokenId, `genie:daily:free:${gid}`)
                         }
                     })
                 }
@@ -610,9 +564,9 @@ export default function useDailyTaskExecutor() {
             if(!hasCompeteToday(tokenId,`genie_buysweep:${i}`)){
                 taskList.push({
                     name: `领取免费扫荡卷 ${i + 1}/3`,
-                    execute: () => {
-                        executeGameCommand(tokenId, 'genie_buysweep', {}, `领取免费扫荡卷 ${i + 1}`)
-                        markCompeteToday(tokenId,`genie_buysweep:${i}`)
+                    execute: async () => {
+                        await executeGameCommand(tokenId, 'genie_buysweep', {}, `领取免费扫荡卷 ${i + 1}`)
+                        markCompeteToday(tokenId, `genie_buysweep:${i}`)
                     }
                 })
             }
@@ -623,9 +577,9 @@ export default function useDailyTaskExecutor() {
             if (!isTaskCompleted(12) && settings.blackMarketPurchase) {
                 taskList.push({
                     name: '黑市购买1次物品',
-                    execute: () =>{
-                        executeGameCommand(tokenId, 'store_purchase', { goodsId: 1 }, '黑市购买1次物品')
-                        markCompeteToday(tokenId,12)
+                    execute: async () => {
+                        await executeGameCommand(tokenId, 'store_purchase', {goodsId: 1}, '黑市购买1次物品')
+                        markCompeteToday(tokenId, 12)
                     }
                 })
             }
@@ -637,22 +591,25 @@ export default function useDailyTaskExecutor() {
             const mjbattleTeam = { "0": 107 }
             taskList.push({
                 name: '咸王梦境',
-                execute: () => executeGameCommand(tokenId, 'dungeon_selecthero', { battleTeam: mjbattleTeam }, '咸王梦境')
+                execute: async () => await executeGameCommand(tokenId, 'dungeon_selecthero', {battleTeam: mjbattleTeam}, '咸王梦境')
             })
         }
         // 深海灯神领取
         if (mengyandayOfWeek === 1 && isTodayAvailable(statisticsTime[`genie:daily:free:5`])) {
             taskList.push({
                 name: '深海灯神',
-                execute: () => executeGameCommand(tokenId, 'genie_sweep', { genieId: 5, sweepCnt: 1 }, '深海灯神')
+                execute: async () => await executeGameCommand(tokenId, 'genie_sweep', {
+                    genieId: 5,
+                    sweepCnt: 1
+                }, '深海灯神')
             })
         }
         // 13. 任务奖励领取
         for (let taskId = 1; taskId <= 10; taskId++) {
             taskList.push({
                 name: `领取任务奖励${taskId}`,
-                execute: () => executeGameCommand(tokenId, 'task_claimdailypoint',
-                    { taskId }, `领取任务奖励${taskId}`, 5000)
+                execute: async () => await executeGameCommand(tokenId, 'task_claimdailypoint',
+                    {taskId}, `领取任务奖励${taskId}`, 5000)
             })
         }
 
@@ -660,18 +617,18 @@ export default function useDailyTaskExecutor() {
         taskList.push(
             {
                 name: '领取日常任务奖励',
-                execute: () => executeGameCommand(tokenId, 'task_claimdailyreward', {}, '领取日常任务奖励')
+                execute: async () => await executeGameCommand(tokenId, 'task_claimdailyreward', {}, '领取日常任务奖励')
             },
             {
                 name: '领取周常任务奖励',
-                execute: () => executeGameCommand(tokenId, 'task_claimweekreward', {}, '领取周常任务奖励')
+                execute: async () => await executeGameCommand(tokenId, 'task_claimweekreward', {}, '领取周常任务奖励')
             }
         )
         taskList.push({
             name: '恢复原始阵容',
             execute: async () => {
                 logFn('所有任务完成，正在切回原始阵容...', 'success')
-                await switchBackFormationIfNeeded(tokenId, originalFormation, logFn)
+                await switchToFormationIfNeeded(tokenId, originalFormation,'阵容还原', logFn)
             }
         })
         // 执行任务列表
@@ -705,7 +662,8 @@ export default function useDailyTaskExecutor() {
         //答题
         if(!hasCompeteToday(tokenId,'answer_test')){
             await preloadQuestions()
-            tokenStore.sendMessage(tokenId, 'study_startgame')
+            executeGameCommand(tokenId, 'study_startgame', {}, `开始答题`);
+            // tokenStore.sendMessage(tokenId, 'study_startgame')
             logFn(`[${tokenId}] 触发答题，等待8秒，防止多账号串题`, 'info')
             await new Promise(resolve => setTimeout(resolve, 8000))
             logFn(`[${tokenId}] 答题等待结束`, 'success')
@@ -715,7 +673,7 @@ export default function useDailyTaskExecutor() {
             // 最后刷新一次角色信息
             await new Promise(resolve => setTimeout(resolve, 2000))
         }
-        await refreshRoleInfo(tokenId)
+        await refreshRoleInfo(tokenId,syncCompleteFromServer)
     }
 
     // 执行单个账号的每日任务（供DailyTask.vue使用）
@@ -761,7 +719,7 @@ export default function useDailyTaskExecutor() {
                 throw new Error('WebSocket连接未建立')
             }
 
-            const roleInfo = await refreshRoleInfo(token.id)
+            const roleInfo = await refreshRoleInfo(token.id,syncCompleteFromServer)
             if (!roleInfo?.role) {
                 throw new Error('获取角色信息失败或数据异常')
             }
