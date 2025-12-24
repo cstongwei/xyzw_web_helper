@@ -93,8 +93,6 @@ const currentFloor = computed(() => {
 
 const towerEnergy = computed(() => {
   const tower = roleInfo.value?.role?.tower
-
-
   const energy = tower?.energy || 0
   return energy
 })

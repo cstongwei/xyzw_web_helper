@@ -2,6 +2,87 @@
 import { useTokenStore } from '@/stores/tokenStore'
 import LogUtil from "@/utils/LogUtil.js";
 
+// 执行游戏命令（带日志和错误处理）
+export const executeGameCommand = async (tokenId, tokenName,cmd, params = {}, description = '', timeout = 8000) => {
+    try {
+        if (description) LogUtil.info(`${tokenName} 执行: ${description}`);
+
+        const tokenStore = useTokenStore();
+        const result = await tokenStore.sendMessageWithPromise(tokenId, cmd, params, timeout);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (description) LogUtil.info(`${tokenName} ${description} - 成功`, 'success');
+        return result;
+    } catch (error) {
+        if (description) LogUtil.error(`${tokenName} ${description} - 失败: ${error.message}`);
+        throw error;
+    }
+};
+export const sendGameCommand = (tokenId, tokenName,cmd, params = {}, options = {}, description = '') => {
+    try {
+        if (description) LogUtil.info(`${tokenName} 执行: ${description}`);
+        const tokenStore = useTokenStore();
+        tokenStore.sendMessage(tokenId, cmd,options)
+    } catch (error) {
+        if (description) LogUtil.error(`${tokenName} ${description} - 失败: ${error.message}`);
+        throw error;
+    }
+};
+/**
+ * 判断当前时间是否在指定的两个时间点之间（包含边界）
+ * @param {string} startTime - 起始时间，格式 'HH:mm'，例如 '08:00'
+ * @param {string} endTime - 结束时间，格式 'HH:mm'，例如 '21:00'
+ * @returns {boolean} - 当前时间是否在 [startTime, endTime] 区间内
+ */
+export const isBetweenTime = (startTime, endTime) => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const parseTimeToMinutes = (timeStr) => {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            throw new Error(`无效的时间格式: ${timeStr}，应为 'HH:mm'`);
+        }
+        return hours * 60 + minutes;
+    };
+
+    const startMinutes = parseTimeToMinutes(startTime);
+    const endMinutes = parseTimeToMinutes(endTime);
+
+    if (startMinutes <= endMinutes) {
+        // 同一天区间，例如 08:00 ~ 21:00
+        return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    } else {
+        // 跨天区间，例如 22:00 ~ 06:00（虽然你的需求没提，但健壮性考虑）
+        return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+    }
+};
+
+/**
+ * 判断今天是否是指定的星期几之一（支持多个）
+ * @param {number[]} weekdays - 星期几数组，1=周一, 2=周二, ..., 7=周日
+ * @returns {boolean} - 如果今天在指定的星期几中，返回 true
+ */
+export const isTodayInWeekdays = (weekdays) => {
+    if (!Array.isArray(weekdays) || weekdays.length === 0) {
+        return false;
+    }
+
+    // 获取今天是星期几（JS: 0=周日, 1=周一, ..., 6=周六）
+    const todayJsDay = new Date().getDay(); // 0 ~ 6
+
+    // 转换为中文习惯：1=周一 ... 7=周日
+    const todayChineseDay = todayJsDay === 0 ? 7 : todayJsDay; // 周日(0) → 7，其他不变
+
+    // 检查是否在传入的列表中
+    return weekdays.some(day => {
+        if (typeof day !== 'number' || day < 1 || day > 7) {
+            console.warn(`isTodayInWeekdays: 无效的星期值 ${day}，应为 1~7 的整数`);
+            return false;
+        }
+        return day === todayChineseDay;
+    });
+};
+
 // 格式化日期为 yyyyMMdd
 export const formatDateToYMD = (date) => {
     const year = date.getFullYear();
@@ -9,6 +90,7 @@ export const formatDateToYMD = (date) => {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}${month}${day}`;
 };
+
 
 // 检查今日是否已完成某任务
 export const hasCompeteToday = (tokenId, taskName) => {
@@ -54,25 +136,51 @@ export const markCompeteToday = (tokenId, taskName) => {
     LogUtil.info(`标记任务完成: ${key}`);
 };
 
-// 执行游戏命令（带日志和错误处理）
-export const executeGameCommand = async (tokenId, tokenName,cmd, params = {}, description = '', timeout = 8000) => {
-    try {
-        if (description) LogUtil.info(`${tokenName} 执行: ${description}`);
+/**
+ * 确保指定 token 的 WebSocket 处于已连接状态
+ * @param {Object} token - token 对象，需包含 id, name, token, wsUrl 字段
+ * @returns {Promise<{ success: boolean; messages?: string[] }>}
+ */
+export const ensureWebSocketConnected = async (token) => {
+    const tokenStore = useTokenStore();
+    let wsStatus = tokenStore.getWebSocketStatus(token.id);
+    const startTime = Date.now();
+    while (wsStatus === 'connecting' && Date.now() - startTime < 1200) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        wsStatus = tokenStore.getWebSocketStatus(token.id);
+    }
+    if (wsStatus === 'connected') {
+        LogUtil.debug(`${token.name} WebSocket 处于连接状态`);
+        return { success: true };
+    }
 
-        const tokenStore = useTokenStore();
-        const result = await tokenStore.sendMessageWithPromise(tokenId, cmd, params, timeout);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        if (description) LogUtil.info(`${tokenName} ${description} - 成功`, 'success');
-        return result;
-    } catch (error) {
-        if (description) LogUtil.error(`${tokenName} ${description} - 失败: ${error.message}`);
-        throw error;
+    // 检查是否允许自动重连
+    const autoReconnectEnabled = localStorage.getItem('autoReconnectEnabled') !== 'false';
+    if (autoReconnectEnabled) {
+        try {
+            await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl);
+            wsStatus = tokenStore.getWebSocketStatus(token.id);
+            if (wsStatus === 'connected') {
+                LogUtil.info(`${token.name} WebSocket 连接完成`);
+                return { success: true };
+            } else {
+                LogUtil.error(`${token.name} WebSocket 连接失败，状态: ${wsStatus}`);
+                return { success: false, messages: [`WebSocket 连接失败，当前状态: ${wsStatus}`] };
+            }
+        } catch (error) {
+            LogUtil.error(`${token.name} 创建 WebSocket 连接时出错:`, error);
+            return { success: false, messages: [`WebSocket 连接异常: ${error.message || '未知错误'}`] };
+        }
+    } else {
+        LogUtil.info(`${token.name} 不允许自动连接，暂不连接ws`);
+        const messages = ['ws连接关闭，且不允许自动连接'];
+        return { success: false, messages };
     }
 };
 
 export const getFormationInfo = async (tokenId, tokenName) => {
     try {
-        console.log(`[getTokenFormationInfo] 获取${tokenName} 阵容信息`)
+        LogUtil.info(`[getFormationInfo] 获取${tokenName} 阵容信息`)
         const formationInfo = await executeGameCommand(tokenId,tokenName, 'presetteam_getinfo', {}, '获取阵容信息')
         const presetTeamInfo = formationInfo?.presetTeamInfo || {}
         const currentUseTeamId = presetTeamInfo?.useTeamId || 1
@@ -89,7 +197,7 @@ export const getFormationInfo = async (tokenId, tokenName) => {
             formationOptions
         }
     } catch (error) {
-        console.error(`[getTokenFormationInfo] Token ${tokenId} 获取失败:`, error)
+        LogUtil.error(`[getFormationInfo] ${tokenName} 获取失败:`, error)
         return {
             currentUseTeamId: '1',
             formationOptions: [{ label: '阵容1', value: '1' }]

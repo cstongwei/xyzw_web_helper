@@ -210,18 +210,24 @@
 </template>
 
 <script setup>
-import { useTokenStore } from '@/stores/tokenStore'
-import { Pause, Play, PlayCircle, Refresh, DocumentText, Settings } from '@vicons/ionicons5'
-import { NIcon, NButton, NBadge, NModal, NTag, NSelect, NInput } from 'naive-ui'
-import { useTaskManager } from '@/composables/useTaskManager'
-import { ref, computed, watch, onMounted } from 'vue'
-
+import {useTokenStore} from '@/stores/tokenStore'
+import {DocumentText, Pause, Play, PlayCircle, Refresh, Settings} from '@vicons/ionicons5'
+import {NBadge, NButton, NIcon, NInput, NModal, NSelect, NTag} from 'naive-ui'
+import {useTaskManager} from '@/composables/useTaskManager'
+import {computed, onMounted, ref, watch} from 'vue'
+import {
+  ensureWebSocketConnected,
+  executeGameCommand,
+  getFormationInfo,
+  sendGameCommand,
+  switchToFormationIfNeeded
+} from '@/utils/CommonUtil.js';
+import LogUtil from "@/utils/LogUtil.js";
 // 公共常量
 const DEFAULT_INTERVAL_MINUTES = 60 // 默认间隔60分钟
-const DELAY_SHORT = 500
 const SETTINGS_KEY = 'tower_token_formation_settings'
 const MAX_CLIMB_TIMES = 100 // 最大爬塔次数
-const CLIMB_TIMEOUT = 60000 // 爬塔超时时间（ms）
+const CLIMB_TIMEOUT = 5*60000 // 爬塔超时时间（ms）
 
 // 弹窗控制
 const isSettingModalOpen = ref(false)
@@ -230,6 +236,9 @@ const isLogModalOpen = ref(false)
 // Token存储
 const tokenStore = useTokenStore()
 
+const roleInfo = computed(() => {
+  return tokenStore.gameData?.roleInfo || null
+})
 // 阵容配置
 const tokenFormationSettings = ref([])
 
@@ -265,35 +274,6 @@ const saveTokenFormationSettings = () => {
   }
 }
 
-/**
- * 获取单个Token的实际阵容信息
- */
-const getTokenFormationInfo = async (tokenId) => {
-  try {
-    console.log(`[getTokenFormationInfo] 获取Token ${tokenId} 阵容信息`)
-    const formationInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
-    const presetTeamInfo = formationInfo?.presetTeamInfo || {}
-    const currentUseTeamId = presetTeamInfo?.useTeamId || 1
-    const presetTeams = presetTeamInfo?.presetTeamInfo || {}
-
-    const teamIds = Object.keys(presetTeams).map(Number).filter(id => !isNaN(id)).sort((a, b) => a - b)
-    const formationOptions = teamIds.map(teamId => ({
-      label: `阵容${teamId}`,
-      value: teamId.toString()
-    }))
-
-    return {
-      currentUseTeamId: currentUseTeamId.toString(),
-      formationOptions
-    }
-  } catch (error) {
-    console.error(`[getTokenFormationInfo] Token ${tokenId} 获取失败:`, error)
-    return {
-      currentUseTeamId: '1',
-      formationOptions: [{ label: '阵容1', value: '1' }]
-    }
-  }
-}
 
 /**
  * 初始化Token阵容配置
@@ -302,12 +282,15 @@ const initTokenFormationSettings = async () => {
   console.log('[initTokenFormationSettings] 开始初始化阵容配置')
   const allTokens = tokenStore.gameTokens || []
   const savedSettings = getSavedFormationSettings()
-
   tokenFormationSettings.value = []
   for (const token of allTokens) {
-    const { currentUseTeamId, formationOptions } = await getTokenFormationInfo(token.id)
+    const result = await ensureWebSocketConnected(token);
+    if (!result.success) {
+      LogUtil.error(`无法初始化阵容配置: ${token.name}，${JSON.stringify(result)}`)
+      continue;
+    }
+    const { currentUseTeamId, formationOptions } = await getFormationInfo(token.id,token.name)
     const defaultFormation = savedSettings[token.id] || currentUseTeamId
-
     tokenFormationSettings.value.push({
       tokenId: token.id,
       tokenName: token.name,
@@ -354,109 +337,110 @@ const getSettingsStatusText = () => {
 /**
  * 获取塔信息
  */
-const getTowerInfo = async (tokenId, messages = []) => {
+/**
+ * 获取并等待塔信息更新完成
+ * @param {string} tokenId
+ * @param {string} tokenName
+ * @param {function} logFn
+ * @param {number} timeoutMs - 超时时间（毫秒）
+ * @returns {Promise<Object>} 最新的 tower 数据
+ */
+const getTowerInfo = async (tokenId, tokenName, logFn, timeoutMs = 8000) => {
   try {
-    messages.push(`[${new Date().toLocaleString()}] 开始获取Token塔信息`)
-    const wsStatus = tokenStore.getWebSocketStatus(tokenId)
-    messages.push(`[${new Date().toLocaleString()}] WebSocket连接状态：${wsStatus}`)
+    // 记录调用前的时间戳或快照，用于判断是否更新
+    const store = roleInfo.value?.role?.tower || {};
+    const initialEnergy = store.energy;
+    const startTime = Date.now();
 
-    if (wsStatus !== 'connected') {
-      messages.push(`[${new Date().toLocaleString()}] WebSocket未连接，跳过塔信息获取`)
-      return
+    logFn(`[${tokenName}] 发送角色信息刷新指令`);
+    sendGameCommand(tokenId, tokenName, 'role_getroleinfo', {});
+
+    logFn(`[${tokenName}] 发送塔信息获取指令`);
+    sendGameCommand(tokenId, tokenName, 'tower_getinfo', {});
+
+    // 轮询等待数据更新
+    while (Date.now() - startTime < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, 300)); // 每 300ms 检查一次
+      const currentTower =  roleInfo.value?.role?.tower || {};
+      const hasUpdated =
+          currentTower.energy !== initialEnergy ||
+          // 如果初始是空对象，只要现在有值也算更新
+          (initialEnergy == null && currentTower.energy != null) ;
+
+      if (hasUpdated) {
+        logFn(`[${tokenName}] 塔信息已更新：体力=${currentTower.energy || 0}, 层数=${currentTower || '未知'}`);
+        return currentTower;
+      }
     }
 
-    // 刷新角色信息（包含塔数据）
-    messages.push(`[${new Date().toLocaleString()}] 发送角色信息刷新指令`)
-    await tokenStore.sendMessageWithPromise(tokenId, 'role_getroleinfo', {}, 5000)
-
-    // 获取塔信息
-    messages.push(`[${new Date().toLocaleString()}] 发送塔信息获取指令`)
-    await tokenStore.sendMessageWithPromise(tokenId, 'tower_getinfo', {}, 5000)
-    messages.push(`[${new Date().toLocaleString()}] 塔信息获取成功`)
+    // 超时
+    logFn(`[${tokenName}] 等待塔信息响应超时（${timeoutMs}ms），使用现有数据`);
+    return store;
   } catch (error) {
-    messages.push(`[${new Date().toLocaleString()}] 获取塔信息失败：${error.message}`)
-    console.error(`[getTowerInfo] Token ${tokenId} 获取失败:`, error)
+    const errorMsg = `[${tokenName}] 获取塔信息异常：${error.message || '未知错误'}`;
+    logFn(errorMsg);
+    console.error('[getTowerInfo] Error:', error);
+    throw error;
   }
-}
-
-/**
- * 获取Token当前体力
- */
-const getTokenTowerEnergy = (tokenId, messages = []) => {
-  try {
-    messages.push(`[${new Date().toLocaleString()}] 开始获取Token体力值`)
-    const roleInfo = tokenStore.gameData?.[tokenId]?.roleInfo || tokenStore.gameData?.roleInfo
-    const tower = roleInfo?.role?.tower || {}
-    const energy = tower.energy || 0
-    messages.push(`[${new Date().toLocaleString()}] 成功获取体力值：${energy}`)
-    return energy
-  } catch (error) {
-    messages.push(`[${new Date().toLocaleString()}] 获取体力值失败：${error.message}`)
-    console.error(`[getTokenTowerEnergy] Token ${tokenId} 获取失败:`, error)
-    return 0
-  }
-}
+};
 
 /**
  * 执行爬塔战斗
  */
-const executeTowerBattle = async (tokenId, tokenName, messages) => {
+const executeTowerBattle = async (tokenId, tokenName, logFn) => {
   let stopFlag = false
   let climbTimeout = null
   let climbCount = 0
 
-  messages.push(`[${new Date().toLocaleString()}] 开始批量爬塔（最大次数：${MAX_CLIMB_TIMES}次，超时保护：${CLIMB_TIMEOUT/1000}秒）`)
+  logFn(`[${tokenName}] 开始批量爬塔（最大次数：${MAX_CLIMB_TIMES}次，超时保护：${CLIMB_TIMEOUT/1000}秒）`)
 
   try {
     // 超时保护
     climbTimeout = setTimeout(() => {
       stopFlag = true
-      messages.push(`[${new Date().toLocaleString()}] 爬塔超时，强制终止`)
+      logFn(`[${tokenName}] 爬塔超时，强制终止`)
     }, CLIMB_TIMEOUT)
 
     // 批量爬塔循环
     for (let i = 0; i < MAX_CLIMB_TIMES; i++) {
       if (stopFlag) {
-        messages.push(`[${new Date().toLocaleString()}] 检测到停止标记，终止爬塔循环`)
+        logFn(`[${tokenName}] 检测到停止标记，终止爬塔循环`)
         break
       }
 
-      messages.push(`[${new Date().toLocaleString()}] 开始第${i+1}次爬塔尝试`)
-
-      // 刷新塔信息
-      await getTowerInfo(tokenId, messages)
-
-      // 检查体力
-      const energy = getTokenTowerEnergy(tokenId, messages)
+      //触发获取体力和塔信息
+      const tower = await getTowerInfo(tokenId,tokenName, logFn);
+      const energy = tower?.energy || 0
+      // 5. 爬塔核心逻辑
+      logFn(`[${tokenName}] 开始爬塔流程，检查体力`)
       if (energy <= 0) {
-        messages.push(`[${new Date().toLocaleString()}] 体力耗尽（剩余：${energy}），终止爬塔`)
+        logFn(`[${tokenName}] 体力耗尽（剩余：${energy}），终止爬塔`)
         break
       }
-
       // 执行爬塔
-      messages.push(`[${new Date().toLocaleString()}] 第${i+1}次爬塔：体力剩余${energy}，发送爬塔指令`)
-      await tokenStore.sendMessageWithPromise(tokenId, 'fight_starttower', {}, 10000)
+      logFn(`[${tokenName}] 第${i+1}次爬塔：体力剩余${energy}，发送爬塔指令`)
+      await executeGameCommand(tokenId, tokenName, 'fight_starttower', {}, '爬塔',10000)
       climbCount++
-      messages.push(`[${new Date().toLocaleString()}] 第${climbCount}次爬塔指令发送成功`)
+      logFn(`[${tokenName}] 第${climbCount}次爬塔指令发送成功`)
 
       // 达到最大次数
       if (i === MAX_CLIMB_TIMES - 1) {
-        messages.push(`[${new Date().toLocaleString()}] 达到最大爬塔次数（${MAX_CLIMB_TIMES}次），终止循环`)
+        logFn(`[${tokenName}] 达到最大爬塔次数（${MAX_CLIMB_TIMES}次），终止循环`)
         break
       }
 
       // 间隔2秒
       await new Promise(res => setTimeout(res, 2000))
     }
-
-    messages.push(`[${new Date().toLocaleString()}] 批量爬塔完成，实际执行：${climbCount}次，剩余体力：${getTokenTowerEnergy(tokenId)}`)
+    const lastTower = await getTowerInfo(tokenId,tokenName, logFn);
+    logFn(`[${tokenName}] 批量爬塔完成，实际执行：${climbCount}次，剩余体力：${lastTower?.energy || 0}`)
   } catch (error) {
-    const errorMsg = `[${new Date().toLocaleString()}] 批量爬塔失败：${error.message || '未知错误'}`
-    messages.push(errorMsg)
+    const errorMsg = `[${tokenName}] 批量爬塔失败：${error.message || '未知错误'}`
+    logFn(errorMsg)
     throw new Error(errorMsg)
   } finally {
     if (climbTimeout) clearTimeout(climbTimeout)
-    messages.push(`[${new Date().toLocaleString()}] 爬塔流程结束，共执行${climbCount}次`)
+    logFn(`[${tokenName}] 爬塔流程结束，共执行${climbCount}次`)
   }
 }
 
@@ -465,56 +449,38 @@ const executeTowerBattle = async (tokenId, tokenName, messages) => {
  */
 const executeSingleTokenBusiness = async (token) => {
   const messages = []
+  const logFn = (message) => {
+    messages.push(message)
+    LogUtil.info(message)
+  }
   try {
     // 1. 基础信息
-    messages.push(`[${new Date().toLocaleString()}] 开始处理Token：${token.name}（ID：${token.id}）`)
-
-    // 2. 获取原始阵容
-    messages.push(`[${new Date().toLocaleString()}] 开始获取原始阵容信息`)
-    const { currentUseTeamId } = await getTokenFormationInfo(token.id)
-    const originalFormation = currentUseTeamId
-    messages.push(`[${new Date().toLocaleString()}] 原始阵容：${originalFormation}号`)
-
-    // 3. 获取目标阵容
+    logFn(`开始处理${token.name}（ID：${token.id}）爬塔`)
+    const conRest = await ensureWebSocketConnected(token);
+    if (!conRest.success) {
+      return conRest;
+    }
+    // 2.  获取目标阵容
     const savedSettings = getSavedFormationSettings()
-    const targetFormation = savedSettings[token.id] || originalFormation
-    messages.push(`[${new Date().toLocaleString()}] 目标阵容：${targetFormation}号（${savedSettings[token.id] ? '自定义配置' : '游戏当前阵容'}）`)
+    const targetFormation = savedSettings[token.id]
 
+    // 3. 获取原阵容，为事后还原做准备
+    const { currentUseTeamId, formationOptions } = await getFormationInfo(token.id,token.name)
+    const origianFormation = currentUseTeamId
+    const needSwitch = origianFormation !== targetFormation
     // 4. 切换阵容
-    if (targetFormation !== originalFormation) {
-      messages.push(`[${new Date().toLocaleString()}] 切换到爬塔阵容：${targetFormation}号`)
-      await tokenStore.sendMessageWithPromise(token.id, 'presetteam_saveteam', { teamId: targetFormation }, 8000)
-      await new Promise(resolve => setTimeout(resolve, DELAY_SHORT))
-      messages.push(`[${new Date().toLocaleString()}] 阵容切换完成`)
-    } else {
-      messages.push(`[${new Date().toLocaleString()}] 原始阵容已为目标阵容，无需切换`)
+    if(needSwitch){
+      await switchToFormationIfNeeded(token.id, token.name, targetFormation, '爬塔阵容', logFn)
+    }
+    await executeTowerBattle(token.id, token.name, logFn)
+    if(needSwitch){
+      await switchToFormationIfNeeded(token.id, token.name, origianFormation, '还原阵容', logFn)
     }
 
-    // 5. 爬塔核心逻辑
-    messages.push(`[${new Date().toLocaleString()}] 开始爬塔流程，检查体力`)
-    const energy = getTokenTowerEnergy(token.id, messages)
-    if (energy <= 0) {
-      messages.push(`[${new Date().toLocaleString()}] 体力耗尽（剩余：${energy}），终止爬塔`)
-    } else {
-      messages.push(`[${new Date().toLocaleString()}] 体力充足（剩余：${energy}），开始执行爬塔`)
-      await executeTowerBattle(token.id, token.name, messages)
-    }
-
-    // 6. 还原阵容
-    if (targetFormation !== originalFormation) {
-      messages.push(`[${new Date().toLocaleString()}] 开始还原原始阵容：${originalFormation}号`)
-      try {
-        await tokenStore.sendMessageWithPromise(token.id, 'presetteam_saveteam', { teamId: originalFormation }, 8000)
-        messages.push(`[${new Date().toLocaleString()}] 原始阵容还原成功`)
-      } catch (restoreError) {
-        messages.push(`[${new Date().toLocaleString()}] 还原原始阵容失败：${restoreError.message}`)
-      }
-    }
-
-    messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 爬塔流程完成`)
+    messages.push(`[${token.name}] 爬塔流程完成`)
     return { success: true, messages }
   } catch (error) {
-    const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 爬塔处理失败：${error.message}`
+    const errorMsg = `[${token.name} 爬塔处理失败：${error.message}`
     messages.push(errorMsg)
     return { success: false, messages }
   }

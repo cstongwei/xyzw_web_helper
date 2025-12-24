@@ -8,7 +8,8 @@ import {
     executeGameCommand,
     refreshRoleInfo,
     hasCompeteToday,
-    markCompeteToday
+    markCompeteToday,
+    isBetweenTime, isTodayInWeekdays, ensureWebSocketConnected
 } from '@/utils/CommonUtil.js';
 // 每日任务列表
 const tasks = ref([
@@ -94,56 +95,6 @@ export default function useDailyTaskExecutor() {
         }
     }
 
-    // const switchBackFormationIfNeeded=async (tokenId, originalFormation, logFn) => {
-    //     //切换回原本阵容
-    //     if(!originalFormation){
-    //         originalFormation=1
-    //     }
-    //     await switchToFormationIfNeeded(tokenId, originalFormation, '原阵容', logFn)
-    //
-    //     const finalCheck = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 5000);
-    //     const finalFormation = finalCheck?.presetTeamInfo?.useTeamId;
-    //     if (finalFormation !== originalFormation) {
-    //         logFn(`🚨 警告：最终阵容 (${finalFormation}) 与原始阵容 (${originalFormation}) 不一致！`, 'error');
-    //     }
-    // }
-    // // 智能阵容切换辅助函数
-    // const switchToFormationIfNeeded = async (tokenId, targetFormation, formationName, logFn) => {
-    //     try {
-    //         const cachedTeamInfo = tokenStore.gameData?.presetTeam?.presetTeamInfo
-    //         let currentFormation = cachedTeamInfo?.useTeamId
-    //
-    //         if (currentFormation) {
-    //             logFn(`从缓存获取当前阵容: ${currentFormation}`)
-    //         } else {
-    //             logFn(`缓存中无阵容信息，从服务器获取...`)
-    //             const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
-    //             currentFormation = teamInfo?.presetTeamInfo?.useTeamId
-    //             logFn(`从服务器获取当前阵容: ${currentFormation}`)
-    //         }
-    //
-    //         if (currentFormation === targetFormation) {
-    //             logFn(`当前已是${formationName}${targetFormation}，无需切换`, 'success')
-    //             return false
-    //         }
-    //
-    //         logFn(`当前阵容: ${currentFormation}, 目标阵容: ${targetFormation}，开始切换...`)
-    //         await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam',
-    //             { teamId: targetFormation }, 8000)
-    //         logFn(`成功切换到${formationName}${targetFormation}`, 'success')
-    //         return true
-    //     } catch (error) {
-    //         logFn(`阵容检查失败，直接切换: ${error.message}`, 'warning')
-    //         try {
-    //             await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam',
-    //                 { teamId: targetFormation }, 8000)
-    //             return true
-    //         } catch (fallbackError) {
-    //             logFn(`强制切换也失败: ${fallbackError.message}`, 'error')
-    //             throw fallbackError
-    //         }
-    //     }
-    // }
 
     // 检查是否今日可用
     const isTodayAvailable = (statisticsTime) => {
@@ -351,7 +302,8 @@ export default function useDailyTaskExecutor() {
         }
 
         // 8. 竞技场 (任务ID: 13)
-        if (!isTaskCompleted(13) && settings.arenaEnable && !hasCompeteToday(tokenId,13)) {
+        const isArenaAvailableTime = isBetweenTime('08:01', '21:58')
+        if (!isTaskCompleted(13) && settings.arenaEnable && isArenaAvailableTime && !hasCompeteToday(tokenId,13)) {
             taskList.push({
                 name: '竞技场战斗',
                 execute: async () => {
@@ -428,22 +380,25 @@ export default function useDailyTaskExecutor() {
                 }
             }
         }
-        taskList.push({
-            name: '每日BOSS阵容检查',
-            execute: async () => await switchToFormationIfNeeded(tokenId,tokenName, settings.bossFormation, 'BOSS阵容', logFn)
-        })
-        // 每日BOSS
-        const todayBossId = getTodayBossId()
-        for (let i = 0; i < 3; i++) {
-            taskList.push({
-                name: `每日BOSS ${i + 1}/3`,
-                execute: async () => {
-                    await executeGameCommand(tokenId, tokenName,'fight_startboss',
-                        {bossId: todayBossId}, `每日BOSS ${i + 1}`, 12000)
-                }
-            })
-        }
 
+        const isEveryDayBossTime = isBetweenTime('08:01', '22:58')
+        if(isEveryDayBossTime){
+            taskList.push({
+                name: '每日BOSS阵容检查',
+                execute: async () => await switchToFormationIfNeeded(tokenId,tokenName, settings.bossFormation, 'BOSS阵容', logFn)
+            })
+            // 每日BOSS
+            const todayBossId = getTodayBossId()
+            for (let i = 0; i < 3; i++) {
+                taskList.push({
+                    name: `每日BOSS ${i + 1}/3`,
+                    execute: async () => {
+                        await executeGameCommand(tokenId, tokenName,'fight_startboss',
+                            {bossId: todayBossId}, `每日BOSS ${i + 1}`, 12000)
+                    }
+                })
+            }
+        }
 
         // 10. 固定奖励领取
         const fixedRewards = [
@@ -554,8 +509,7 @@ export default function useDailyTaskExecutor() {
         }
 
         // 咸王梦境领取
-        const mengyandayOfWeek = new Date().getDay()
-        if (mengyandayOfWeek === 0 || mengyandayOfWeek === 1 || mengyandayOfWeek === 3 || mengyandayOfWeek === 4) {
+        if (isTodayInWeekdays([1, 3, 4, 7])) {
             const mjbattleTeam = { "0": 107 }
             taskList.push({
                 name: '咸王梦境',
@@ -563,7 +517,7 @@ export default function useDailyTaskExecutor() {
             })
         }
         // 深海灯神领取
-        if (mengyandayOfWeek === 1 && isTodayAvailable(statisticsTime[`genie:daily:free:5`])) {
+        if (isTodayInWeekdays([1])&& isTodayAvailable(statisticsTime[`genie:daily:free:5`])) {
             taskList.push({
                 name: '深海灯神',
                 execute: async () => await executeGameCommand(tokenId, tokenName,'genie_sweep', {
@@ -648,29 +602,13 @@ export default function useDailyTaskExecutor() {
     const executeDailyBusiness = async (token) => {
         const key = `daily-TASK:${token.id}`
         const taskRun = localStorage.getItem(key)
-        if (taskRun) return
-        localStorage.setItem(key, new Date().toISOString())
-        let wsStatus = tokenStore.getWebSocketStatus(token.id)
-        if (wsStatus === 'connected') {
-            LogUtil.debug(`${token.name} WebSocket 已连接，跳过`)
-        }else if(wsStatus === 'connecting'){
-            LogUtil.debug(`${token.name} WebSocket 正在连接，等待800ms`)
-            await new Promise(resolve => setTimeout(resolve, 800))
-            wsStatus = tokenStore.getWebSocketStatus(token.id)
-        }else{
-            const autoReconnectEnabled = ref(localStorage.getItem('autoReconnectEnabled') !== 'false')
-            if(autoReconnectEnabled.value){
-                await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl)
-                wsStatus = tokenStore.getWebSocketStatus(token.id)
-                LogUtil.info(`${token.name} WebSocket 连接完成`)
-            }else {
-                LogUtil.info(`${token.name} 不允许自动连接，暂不连接ws`)
-                const messages = []
-                messages.push('ws连接关闭，且不允许自动连接')
-                return { success: false,messages }
-            }
-
+        if (taskRun){
+            const messages = []
+            messages.push('任务已经启动，不重复执行')
+            return { success: false,messages }
         }
+        localStorage.setItem(key, new Date().toISOString())
+
         const messages = []
         const logFn = (message, type = 'info') => {
             const time = new Date().toLocaleTimeString()
@@ -679,14 +617,13 @@ export default function useDailyTaskExecutor() {
             messages.push(messageItem)
             LogUtil.info(messageItem)
         }
+        const result = await ensureWebSocketConnected(token);
+        if (!result.success) {
+            return result;
+        }
 
         try {
             logFn(`开始为 ${token.name} (ID: ${token.id}) 执行每日任务自动补差...`)
-            logFn(`WebSocket连接状态: ${wsStatus}`)
-            if (wsStatus !== 'connected') {
-                throw new Error('WebSocket连接未建立')
-            }
-
             const roleInfo = await refreshRoleInfo(token.id,token.name,syncCompleteFromServer)
             if (!roleInfo?.role) {
                 throw new Error('获取角色信息失败或数据异常')
