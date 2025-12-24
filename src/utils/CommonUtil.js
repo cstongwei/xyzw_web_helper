@@ -55,23 +55,50 @@ export const markCompeteToday = (tokenId, taskName) => {
 };
 
 // 执行游戏命令（带日志和错误处理）
-export const executeGameCommand = async (tokenId, cmd, params = {}, description = '', timeout = 8000) => {
+export const executeGameCommand = async (tokenId, tokenName,cmd, params = {}, description = '', timeout = 8000) => {
     try {
-        if (description) LogUtil.info(`执行: ${description}`);
+        if (description) LogUtil.info(`${tokenName} 执行: ${description}`);
 
         const tokenStore = useTokenStore();
         const result = await tokenStore.sendMessageWithPromise(tokenId, cmd, params, timeout);
         await new Promise(resolve => setTimeout(resolve, 500));
-        if (description) LogUtil.info(`${description} - 成功`, 'success');
+        if (description) LogUtil.info(`${tokenName} ${description} - 成功`, 'success');
         return result;
     } catch (error) {
-        if (description) LogUtil.info(`${description} - 失败: ${error.message}`, 'error');
+        if (description) LogUtil.error(`${tokenName} ${description} - 失败: ${error.message}`);
         throw error;
     }
 };
 
+export const getFormationInfo = async (tokenId, tokenName) => {
+    try {
+        console.log(`[getTokenFormationInfo] 获取${tokenName} 阵容信息`)
+        const formationInfo = await executeGameCommand(tokenId,tokenName, 'presetteam_getinfo', {}, '获取阵容信息')
+        const presetTeamInfo = formationInfo?.presetTeamInfo || {}
+        const currentUseTeamId = presetTeamInfo?.useTeamId || 1
+        const presetTeams = presetTeamInfo?.presetTeamInfo || {}
+
+        const teamIds = Object.keys(presetTeams).map(Number).filter(id => !isNaN(id)).sort((a, b) => a - b)
+        const formationOptions = teamIds.map(teamId => ({
+            label: `阵容${teamId}`,
+            value: teamId.toString()
+        }))
+
+        return {
+            currentUseTeamId: currentUseTeamId.toString(),
+            formationOptions
+        }
+    } catch (error) {
+        console.error(`[getTokenFormationInfo] Token ${tokenId} 获取失败:`, error)
+        return {
+            currentUseTeamId: '1',
+            formationOptions: [{ label: '阵容1', value: '1' }]
+        }
+    }
+}
+
 // 切换到指定阵容（智能判断是否需要切换）
-export const switchToFormationIfNeeded = async (tokenId, targetFormation, formationName, logFn) => {
+export const switchToFormationIfNeeded = async (tokenId,tokenName, targetFormation, formationName, logFn) => {
     const tokenStore = useTokenStore();
 
     try {
@@ -82,40 +109,41 @@ export const switchToFormationIfNeeded = async (tokenId, targetFormation, format
             logFn(`从缓存获取当前阵容: ${currentFormation}`);
         } else {
             logFn(`缓存中无阵容信息，从服务器获取...`);
-            const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000);
-            currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
-            logFn(`从服务器获取当前阵容: ${currentFormation}`);
+            // const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000);
+            const teamInfo = await getFormationInfo(tokenId,tokenName)
+            currentFormation = teamInfo.currentUseTeamId;
+            logFn(`从服务器获取${tokenName}当前阵容: ${currentFormation}`);
         }
 
         if (currentFormation === targetFormation) {
-            logFn(`当前已是${formationName}${targetFormation}，无需切换`, 'success');
+            logFn(`${tokenName}当前已是${formationName}${targetFormation}，无需切换`, 'success');
             return false;
         }
 
-        logFn(`当前阵容: ${currentFormation}, 目标阵容: ${targetFormation}，开始切换...`);
-        await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam', { teamId: targetFormation }, 8000);
-        logFn(`成功切换到${formationName}${targetFormation}`, 'success');
+        logFn(`${tokenName} - 当前阵容: ${currentFormation}, 目标阵容: ${targetFormation}，开始切换...`);
+        await executeGameCommand(tokenId,tokenName, 'presetteam_saveteam', { teamId: targetFormation }, `切换到阵容${formationName}${targetFormation}`)
+        logFn(`${tokenName} - 成功切换到${formationName}${targetFormation}`, 'success');
         return true;
     } catch (error) {
-        logFn(`阵容检查失败，直接切换: ${error.message}`, 'warning');
+        logFn(`${tokenName}-阵容检查失败，直接切换: ${error.message}`, 'warning');
         try {
-            await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_saveteam', { teamId: targetFormation }, 8000);
+            await executeGameCommand(tokenId,tokenName, 'presetteam_saveteam', { teamId: targetFormation }, `切换到阵容${formationName}${targetFormation}`)
             return true;
         } catch (fallbackError) {
-            logFn(`强制切换也失败: ${fallbackError.message}`, 'error');
+            logFn(`${tokenName}-强制切换也失败: ${fallbackError.message}`, 'error');
             throw fallbackError;
         }
     }
 };
 
 // 刷新角色信息（支持回调同步任务状态）
-export const refreshRoleInfo = async (tokenId, onSyncComplete = null) => {
+export const refreshRoleInfo = async (tokenId,tokenName, onSyncComplete = null) => {
     const tokenStore = useTokenStore();
-    LogUtil.info('正在获取角色信息...');
+    LogUtil.info(`正在获取角色${tokenName}信息...`);
 
     try {
         const response = await tokenStore.sendGetRoleInfo(tokenId);
-        LogUtil.info('角色信息获取成功', 'success');
+        LogUtil.info(`${tokenName}角色信息获取成功`);
 
         // 如果提供了回调，则调用它来处理同步逻辑
         if (response && typeof onSyncComplete === 'function') {
@@ -124,7 +152,7 @@ export const refreshRoleInfo = async (tokenId, onSyncComplete = null) => {
 
         return response;
     } catch (error) {
-        LogUtil.info(`获取角色信息失败: ${error.message}`, 'error');
+        LogUtil.info(`获取角色${tokenName}信息失败: ${error.message}`);
         throw error;
     }
 };
