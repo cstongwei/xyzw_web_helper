@@ -3,12 +3,13 @@ import { useTokenStore } from '@/stores/tokenStore'
 import { timedTaskManager } from '@/utils/timedTaskManager'
 import { useMessage } from 'naive-ui'
 import LogUtil from "@/utils/LogUtil.js";
+import {ensureWebSocketConnected} from "@/utils/CommonUtil.js";
 
 // 公共常量
 const CONNECT_TIMEOUT = 15000 // WebSocket 连接超时（ms）
 const DELAY_MEDIUM = 500 // 连接检查间隔（ms）
 const RETRY_INTERVAL_MS = 2 * 60 * 1000 // 失败重试间隔：2分钟
-const MAX_RETRY_TIMES = 10 // 最大重试次数
+// const MAX_RETRY_TIMES = 10 // 最大重试次数
 const DEFAULT_INTERVAL_MINUTES = 280 // 默认间隔分钟
 
 /**
@@ -83,82 +84,19 @@ export function useTaskManager(options) {
         }
     }
 
-    // ========== 公共Token连接逻辑 ==========
-    /**
-     * 公共Token连接方法
-     */
-    const connectToken = async (token) => {
-        const messages = []
-        try {
-            let connectionStatus = tokenStore.getWebSocketStatus(token.id)
-            if (connectionStatus === 'connected') {
-                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 已连接，跳过连接步骤`)
-                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}`)
-                return { success: true, needTry:false, messages }
-            }else if(connectionStatus === 'connecting'){
-                LogUtil.debug(`${token.name} WebSocket 正在连接，等待800ms`)
-                await new Promise(resolve => setTimeout(resolve, 800))
-                connectionStatus = tokenStore.getWebSocketStatus(token.id)
-                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}`)
-                if (connectionStatus === 'connected') {
-                    return { success: true,needTry:false,  messages }
-                }
-            }else{
-                const autoReconnectEnabled = ref(localStorage.getItem('autoReconnectEnabled') !== 'false')
-                if(!autoReconnectEnabled.value){
-                    messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}，但不允许自动连接`)
-                    LogUtil.debug(`${token.name} 不允许自动连接，暂不连接ws`)
-                    return { success: false,needTry:false, messages }
-                }
-            }
-            messages.push(`[${new Date().toLocaleString()}] 正在为 Token ${token.name} 建立 WebSocket 连接...`)
-            await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl)
-
-            await new Promise((resolve, reject) => {
-                let waitTime = 0
-                const checkTimer = setInterval(() => {
-                    const currentStatus = tokenStore.getWebSocketStatus(token.id)
-                    waitTime += DELAY_MEDIUM
-
-                    if (currentStatus === 'connected') {
-                        clearInterval(checkTimer)
-                        messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 连接成功`)
-                        resolve(true)
-                    } else if (currentStatus === 'error' || waitTime >= CONNECT_TIMEOUT) {
-                        clearInterval(checkTimer)
-                        const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败/超时（已等待 ${CONNECT_TIMEOUT/1000} 秒）`
-                        messages.push(errorMsg)
-                        reject(new Error(errorMsg))
-                    }
-                }, DELAY_MEDIUM)
-            })
-
-            return { success: true,needTry:false,  messages }
-        } catch (error) {
-            const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败: ${error.message}`
-            messages.push(errorMsg)
-            return { success: false, needTry:true,  messages }
-        }
-    }
 
     // ========== 公共Token重试框架 ==========
     /**
      * 公共Token执行+失败重试框架
      */
-    const processTokenWithRetry = async (token, retryCount = 0) => {
+    const processBussiness = async (token) => {
         let allMessages = []
 
         try {
             // 1. 公共连接逻辑
-            const connectResult = await connectToken(token)
-            allMessages = [...allMessages, ...connectResult.messages]
-
+            const connectResult = await ensureWebSocketConnected(token)
             if (!connectResult.success) {
-                if (connectResult.needTry){
-                    throw new Error(`Token ${token.name} 连接失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}）`)
-                }else{
-                    return { success: false, allMessages }
-                }
+                return connectResult;
             }
 
             // 2. 执行子组件提供的业务逻辑
@@ -168,20 +106,12 @@ export function useTaskManager(options) {
             if (businessResult.success) {
                 return { success: true, allMessages }
             } else {
-                throw new Error(`Token ${token.name} ${options.taskName} 业务执行失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}）`)
-            }
-        } catch (error) {
-            allMessages.push(`[${new Date().toLocaleString()}] 错误：${error.message}`)
-
-            // 3. 重试逻辑
-            if (retryCount < MAX_RETRY_TIMES) {
-                allMessages.push(`[${new Date().toLocaleString()}] 将在 ${RETRY_INTERVAL_MS/60000} 分钟后进行第 ${retryCount + 1} 次重试...`)
-                await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL_MS))
-                return await processTokenWithRetry(token, retryCount + 1)
-            } else {
-                allMessages.push(`[${new Date().toLocaleString()}] 已达最大重试次数（${MAX_RETRY_TIMES}次），${options.taskName} 任务最终失败`)
+                allMessages.push(`[${token.name}] ${options.taskName} 业务执行失败`)
                 return { success: false, allMessages }
             }
+        } catch (error) {
+            allMessages.push(`[${token.name}] 错误：${error.message}`)
+            return { success: false, allMessages }
         }
     }
 
@@ -232,7 +162,7 @@ export function useTaskManager(options) {
             }
 
             // 调用公共重试框架
-            const result = await processTokenWithRetry(token, 0)
+            const result = await processBussiness(token)
 
             tokenDetail.messages = result.allMessages
             tokenDetail.status = result.success ? 'success' : 'error'
@@ -257,10 +187,14 @@ export function useTaskManager(options) {
     const startTask = (fixTimeTask = false) => {
         // 验证间隔
         validateInterval(fixTimeTask)
-
+        if (taskStatus.value === 'running') {
+            message.warning(`${options.taskName}任务已在运行中，无需重复启动`)
+            return
+        }
         // 删除原有任务（防止重复）
         if (timedTaskManager.getTaskStatus(TASK_ID)) {
             timedTaskManager.deleteTask(TASK_ID)
+            LogUtil.debug(`[${options.taskName}] 已删除原有任务：${TASK_ID}`)
         }
 
         // 创建新任务
@@ -287,6 +221,8 @@ export function useTaskManager(options) {
 
         if (success) {
             taskStatus.value = 'running'
+            // 🔥 新增：主动更新倒计时
+            calculateNextExecuteTime()
             const batchId = generateBatchId()
             logBatches.value.push({
                 batchId,

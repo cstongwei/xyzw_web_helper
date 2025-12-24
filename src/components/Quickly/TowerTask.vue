@@ -239,6 +239,24 @@ const tokenStore = useTokenStore()
 const roleInfo = computed(() => {
   return tokenStore.gameData?.roleInfo || null
 })
+
+const currentFloor = computed(() => {
+  const tower = roleInfo.value?.role?.tower
+
+
+  if (!tower) {
+    return "0 - 0"
+  }
+
+  if (!tower.id && tower.id !== 0) {
+    return "0 - 0"
+  }
+
+  const towerId = tower.id
+  const floor = Math.floor(towerId / 10) + 1
+  const layer = towerId % 10 + 1
+  return `${floor} - ${layer}`
+})
 // 阵容配置
 const tokenFormationSettings = ref([])
 
@@ -343,7 +361,6 @@ const getSettingsStatusText = () => {
  * @param {string} tokenName
  * @param {function} logFn
  * @param {number} timeoutMs - 超时时间（毫秒）
- * @returns {Promise<Object>} 最新的 tower 数据
  */
 const getTowerInfo = async (tokenId, tokenName, logFn, timeoutMs = 8000) => {
   try {
@@ -414,18 +431,18 @@ const executeTowerBattle = async (tokenId, tokenName, logFn) => {
       // 5. 爬塔核心逻辑
       logFn(`[${tokenName}] 开始爬塔流程，检查体力`)
       if (energy <= 0) {
-        logFn(`[${tokenName}] 体力耗尽（剩余：${energy}），终止爬塔`)
+        logFn(`[${tokenName}] 体力耗尽（剩余：${energy}），当前层数：${currentFloor}，终止爬塔`)
         break
       }
       // 执行爬塔
-      logFn(`[${tokenName}] 第${i+1}次爬塔：体力剩余${energy}，发送爬塔指令`)
+      logFn(`[${tokenName}] 第${i+1}次爬塔：体力剩余${energy}，当前层数：${currentFloor}，发送爬塔指令`)
       await executeGameCommand(tokenId, tokenName, 'fight_starttower', {}, '爬塔',10000)
       climbCount++
       logFn(`[${tokenName}] 第${climbCount}次爬塔指令发送成功`)
 
       // 达到最大次数
       if (i === MAX_CLIMB_TIMES - 1) {
-        logFn(`[${tokenName}] 达到最大爬塔次数（${MAX_CLIMB_TIMES}次），终止循环`)
+        logFn(`[${tokenName}] 达到最大爬塔次数（${MAX_CLIMB_TIMES}次），当前层数：${currentFloor}，终止循环`)
         break
       }
 
@@ -433,7 +450,7 @@ const executeTowerBattle = async (tokenId, tokenName, logFn) => {
       await new Promise(res => setTimeout(res, 2000))
     }
     const lastTower = await getTowerInfo(tokenId,tokenName, logFn);
-    logFn(`[${tokenName}] 批量爬塔完成，实际执行：${climbCount}次，剩余体力：${lastTower?.energy || 0}`)
+    logFn(`[${tokenName}] 批量爬塔完成，实际执行：${climbCount}次，剩余体力：${lastTower?.energy || 0}，当前层数：${currentFloor}`)
   } catch (error) {
     const errorMsg = `[${tokenName}] 批量爬塔失败：${error.message || '未知错误'}`
     logFn(errorMsg)
@@ -453,6 +470,8 @@ const executeSingleTokenBusiness = async (token) => {
     messages.push(message)
     LogUtil.info(message)
   }
+  let needSwitch = false
+  let origianFormation;
   try {
     // 1. 基础信息
     logFn(`开始处理${token.name}（ID：${token.id}）爬塔`)
@@ -460,29 +479,31 @@ const executeSingleTokenBusiness = async (token) => {
     if (!conRest.success) {
       return conRest;
     }
+    //先触发更新下数据，避免后续读到历史其他账号数据
+    await getTowerInfo(token.id,token.name, logFn)
     // 2.  获取目标阵容
     const savedSettings = getSavedFormationSettings()
     const targetFormation = savedSettings[token.id]
 
     // 3. 获取原阵容，为事后还原做准备
     const { currentUseTeamId, formationOptions } = await getFormationInfo(token.id,token.name)
-    const origianFormation = currentUseTeamId
-    const needSwitch = origianFormation !== targetFormation
+    origianFormation = currentUseTeamId
+    needSwitch = origianFormation !== targetFormation
     // 4. 切换阵容
     if(needSwitch){
       await switchToFormationIfNeeded(token.id, token.name, targetFormation, '爬塔阵容', logFn)
     }
     await executeTowerBattle(token.id, token.name, logFn)
-    if(needSwitch){
-      await switchToFormationIfNeeded(token.id, token.name, origianFormation, '还原阵容', logFn)
-    }
-
     messages.push(`[${token.name}] 爬塔流程完成`)
     return { success: true, messages }
   } catch (error) {
     const errorMsg = `[${token.name} 爬塔处理失败：${error.message}`
     messages.push(errorMsg)
     return { success: false, messages }
+  }finally {
+    if(needSwitch && origianFormation){
+      await switchToFormationIfNeeded(token.id, token.name, origianFormation, '还原阵容', logFn)
+    }
   }
 }
 
@@ -532,7 +553,7 @@ const validateIntervalWrapper = () => {
     intervalMinutes.value = num.toString()
   }
   // 触发任务管理器的间隔验证
-  validateInterval()
+  validateInterval(false)
 }
 
 /**
