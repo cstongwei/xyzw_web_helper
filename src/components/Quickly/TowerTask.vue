@@ -224,7 +224,7 @@ import {
 } from '@/utils/CommonUtil.js';
 import LogUtil from "@/utils/LogUtil.js";
 // 公共常量
-const DEFAULT_INTERVAL_MINUTES = 60 // 默认间隔60分钟
+const DEFAULT_INTERVAL_MINUTES = 60*6 // 默认间隔60分钟
 const SETTINGS_KEY = 'tower_token_formation_settings'
 const MAX_CLIMB_TIMES = 100 // 最大爬塔次数
 const CLIMB_TIMEOUT = 5*60000 // 爬塔超时时间（ms）
