@@ -61,9 +61,9 @@ class TimedTaskManager {
         this.electronTaskHandlers.set(id, handler);
         task.electronHandler = handler;
 
-        if (task.immediate) {
-            this._executeTask(task);
-        }
+        // if (task.immediate) {
+        //     this._executeTask(task);
+        // }
     }
 
     _createWebTask(task) {
