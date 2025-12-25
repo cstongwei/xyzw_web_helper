@@ -152,7 +152,7 @@ export const ensureWebSocketConnected = async (token) => {
 
         // 已连接：直接成功
         if (connectionStatus === 'connected') {
-            messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 已连接，跳过连接步骤`);
+            messages.push(` Token[${token.name}] 已连接，跳过连接步骤`);
             LogUtil.debug(`${token.name} WebSocket 处于连接状态`);
             return { success: true, needTry: false, messages };
         }
@@ -165,7 +165,7 @@ export const ensureWebSocketConnected = async (token) => {
                 connectionStatus = tokenStore.getWebSocketStatus(token.id);
             }
             if (connectionStatus === 'connected') {
-                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 连接成功（等待后）`);
+                messages.push(`Token[${token.name}] 连接成功（等待后）`);
                 return { success: true, needTry: false, messages };
             }
         }
@@ -173,13 +173,13 @@ export const ensureWebSocketConnected = async (token) => {
         // 检查是否允许自动重连
         const autoReconnectEnabled = localStorage.getItem('autoReconnectEnabled') !== 'false';
         if (!autoReconnectEnabled) {
-            messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}，但不允许自动连接`);
+            messages.push(`Token[${token.name}] 当前连接状态: ${connectionStatus}，但不允许自动连接`);
             LogUtil.info(`${token.name} 不允许自动连接，暂不连接ws`);
             return { success: false, needTry: false, messages };
         }
 
         // 开始连接
-        messages.push(`[${new Date().toLocaleString()}] 正在为 Token ${token.name} 建立 WebSocket 连接...`);
+        messages.push(`正在为 Token ${token.name} 建立 WebSocket 连接...`);
         await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl);
 
         // 等待连接结果（带超时）
@@ -191,11 +191,11 @@ export const ensureWebSocketConnected = async (token) => {
 
                 if (currentStatus === 'connected') {
                     clearInterval(checkTimer);
-                    messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 连接成功`);
+                    messages.push(`Token[${token.name}] 连接成功`);
                     resolve(true);
                 } else if (currentStatus === 'error' || waitTime >= CONNECT_TIMEOUT) {
                     clearInterval(checkTimer);
-                    const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败/超时（已等待 ${CONNECT_TIMEOUT / 1000} 秒）`;
+                    const errorMsg = `Token[${token.name}] 连接失败/超时（已等待 ${CONNECT_TIMEOUT / 1000} 秒）`;
                     messages.push(errorMsg);
                     reject(new Error(errorMsg));
                 }
@@ -205,7 +205,7 @@ export const ensureWebSocketConnected = async (token) => {
         return { success: true, needTry: false, messages };
 
     } catch (error) {
-        const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败: ${error.message}`;
+        const errorMsg = `Token[${token.name}] 连接失败: ${error.message}`;
         messages.push(errorMsg);
         LogUtil.error(`${token.name} 创建 WebSocket 连接时出错:`, error);
         return { success: false, needTry: true, messages };
