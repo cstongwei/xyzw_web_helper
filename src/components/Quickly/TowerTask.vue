@@ -471,6 +471,9 @@ const executeSingleTokenBusiness = async (token) => {
     // 4. 切换阵容
     if(needSwitch){
       await switchToFormationIfNeeded(token.id, token.name, targetFormation, '爬塔阵容', logFn)
+      logFn(`${token.name}当前阵容${origianFormation}爬塔，切换爬塔阵容${targetFormation}`)
+    }else{
+      logFn(`${token.name}当前阵容${origianFormation}爬塔，无需切换阵容`)
     }
     await executeTowerBattle(token.id, token.name, logFn)
     if(needSwitch){
