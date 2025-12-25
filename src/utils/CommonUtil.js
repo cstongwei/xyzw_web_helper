@@ -139,42 +139,76 @@ export const markCompeteToday = (tokenId, taskName) => {
 /**
  * 确保指定 token 的 WebSocket 处于已连接状态
  * @param {Object} token - token 对象，需包含 id, name, token, wsUrl 字段
- * @returns {Promise<{ success: boolean; messages?: string[] }>}
+ * @returns {Promise<{ success: boolean; needTry?: boolean; messages?: string[] }>}
  */
 export const ensureWebSocketConnected = async (token) => {
+    const messages = [];
     const tokenStore = useTokenStore();
-    let wsStatus = tokenStore.getWebSocketStatus(token.id);
-    const startTime = Date.now();
-    while (wsStatus === 'connecting' && Date.now() - startTime < 1200) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        wsStatus = tokenStore.getWebSocketStatus(token.id);
-    }
-    if (wsStatus === 'connected') {
-        LogUtil.debug(`${token.name} WebSocket 处于连接状态`);
-        return { success: true };
-    }
+    const DELAY_MEDIUM = 200; // 假设你有这个常量，否则可替换为具体数值如 200
+    const CONNECT_TIMEOUT = 5000; // 假设超时5秒，按你项目实际值调整
 
-    // 检查是否允许自动重连
-    const autoReconnectEnabled = localStorage.getItem('autoReconnectEnabled') !== 'false';
-    if (autoReconnectEnabled) {
-        try {
-            await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl);
-            wsStatus = tokenStore.getWebSocketStatus(token.id);
-            if (wsStatus === 'connected') {
-                LogUtil.info(`${token.name} WebSocket 连接完成`);
-                return { success: true };
-            } else {
-                LogUtil.error(`${token.name} WebSocket 连接失败，状态: ${wsStatus}`);
-                return { success: false, messages: [`WebSocket 连接失败，当前状态: ${wsStatus}`] };
-            }
-        } catch (error) {
-            LogUtil.error(`${token.name} 创建 WebSocket 连接时出错:`, error);
-            return { success: false, messages: [`WebSocket 连接异常: ${error.message || '未知错误'}`] };
+    try {
+        let connectionStatus = tokenStore.getWebSocketStatus(token.id);
+
+        // 已连接：直接成功
+        if (connectionStatus === 'connected') {
+            messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 已连接，跳过连接步骤`);
+            LogUtil.debug(`${token.name} WebSocket 处于连接状态`);
+            return { success: true, needTry: false, messages };
         }
-    } else {
-        LogUtil.info(`${token.name} 不允许自动连接，暂不连接ws`);
-        const messages = ['ws连接关闭，且不允许自动连接'];
-        return { success: false, messages };
+
+        // 正在连接：等待最多 1200ms（与原 ensureWebSocketConnected 一致）
+        if (connectionStatus === 'connecting') {
+            const startTime = Date.now();
+            while (connectionStatus === 'connecting' && Date.now() - startTime < 1200) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                connectionStatus = tokenStore.getWebSocketStatus(token.id);
+            }
+            if (connectionStatus === 'connected') {
+                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 连接成功（等待后）`);
+                return { success: true, needTry: false, messages };
+            }
+        }
+
+        // 检查是否允许自动重连
+        const autoReconnectEnabled = localStorage.getItem('autoReconnectEnabled') !== 'false';
+        if (!autoReconnectEnabled) {
+            messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}，但不允许自动连接`);
+            LogUtil.info(`${token.name} 不允许自动连接，暂不连接ws`);
+            return { success: false, needTry: false, messages };
+        }
+
+        // 开始连接
+        messages.push(`[${new Date().toLocaleString()}] 正在为 Token ${token.name} 建立 WebSocket 连接...`);
+        await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl);
+
+        // 等待连接结果（带超时）
+        await new Promise((resolve, reject) => {
+            let waitTime = 0;
+            const checkTimer = setInterval(() => {
+                const currentStatus = tokenStore.getWebSocketStatus(token.id);
+                waitTime += DELAY_MEDIUM;
+
+                if (currentStatus === 'connected') {
+                    clearInterval(checkTimer);
+                    messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 连接成功`);
+                    resolve(true);
+                } else if (currentStatus === 'error' || waitTime >= CONNECT_TIMEOUT) {
+                    clearInterval(checkTimer);
+                    const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败/超时（已等待 ${CONNECT_TIMEOUT / 1000} 秒）`;
+                    messages.push(errorMsg);
+                    reject(new Error(errorMsg));
+                }
+            }, DELAY_MEDIUM);
+        });
+
+        return { success: true, needTry: false, messages };
+
+    } catch (error) {
+        const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败: ${error.message}`;
+        messages.push(errorMsg);
+        LogUtil.error(`${token.name} 创建 WebSocket 连接时出错:`, error);
+        return { success: false, needTry: true, messages };
     }
 };
 
@@ -217,13 +251,14 @@ export const switchToFormationIfNeeded = async (tokenId,tokenName, targetFormati
             logFn(`从缓存获取当前阵容: ${currentFormation}`);
         } else {
             logFn(`缓存中无阵容信息，从服务器获取...`);
-            // const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000);
             const teamInfo = await getFormationInfo(tokenId,tokenName)
             currentFormation = teamInfo.currentUseTeamId;
             logFn(`从服务器获取${tokenName}当前阵容: ${currentFormation}`);
         }
-
-        if (currentFormation === targetFormation) {
+        targetFormation = targetFormation || '1';
+        const current = Number(currentFormation);
+        const target = Number(targetFormation);
+        if (current === target) {
             logFn(`${tokenName}当前已是${formationName}${targetFormation}，无需切换`, 'success');
             return false;
         }

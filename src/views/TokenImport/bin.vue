@@ -125,7 +125,12 @@ const uploadBin = (binFile: File) => {
       const userToken = e.target?.result as ArrayBuffer;
       // console.log('转换Token:', userToken);
       const roleToken = await transformToken(userToken);
-      const roleName = roleMeta.roleName || binFile.name.split('.')?.[0] || ''
+      const server = roleMeta.server || 'unkown';
+      const roleNamePart = roleMeta.roleName
+          || (binFile?.name ? binFile.name.split('.')[0] : null)
+          || 'unnamed';
+      const roleName = `${server}-${roleNamePart}`;
+
       // 刷新indexDB数据库token数据
       storeArrayBuffer(roleName, userToken);
       // 上传列表中发现已存在的重复名称，提示消息

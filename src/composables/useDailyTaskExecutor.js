@@ -187,7 +187,8 @@ export default function useDailyTaskExecutor() {
         const statisticsTime = roleData.statisticsTime ?? {}
         // const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
         const teamInfo =  await executeGameCommand(tokenId,tokenName, 'presetteam_getinfo', {}, '获取阵容信息',8000);
-        let originalFormation  = teamInfo?.presetTeamInfo?.useTeamId
+        let originalFormation = teamInfo?.presetTeamInfo?.useTeamId ?? 1;
+        logFn(`当前阵容信息${JSON.stringify(teamInfo)}`, 'info')
         logFn('开始执行每日任务补差')
 
         // 构建任务列表

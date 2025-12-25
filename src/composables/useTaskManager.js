@@ -3,13 +3,17 @@ import { useTokenStore } from '@/stores/tokenStore'
 import { timedTaskManager } from '@/utils/timedTaskManager'
 import { useMessage } from 'naive-ui'
 import LogUtil from "@/utils/LogUtil.js";
+import {ensureWebSocketConnected} from "@/utils/CommonUtil.js";
 
 // 公共常量
 const CONNECT_TIMEOUT = 15000 // WebSocket 连接超时（ms）
 const DELAY_MEDIUM = 500 // 连接检查间隔（ms）
-const RETRY_INTERVAL_MS = 2 * 60 * 1000 // 失败重试间隔：2分钟
+const RETRY_INTERVAL_MS = 30 * 1000 // 失败重试间隔：30秒
 const MAX_RETRY_TIMES = 10 // 最大重试次数
-const DEFAULT_INTERVAL_MINUTES = 280 // 默认间隔分钟
+const DEFAULT_INTERVAL_MINUTES = 381 // 默认间隔分钟
+
+// 🔒 新增：任务启动锁（按 TASK_ID 隔离）
+const taskStartingLock = ref({})
 
 /**
  * 公共任务管理 Composable
@@ -83,64 +87,6 @@ export function useTaskManager(options) {
         }
     }
 
-    // ========== 公共Token连接逻辑 ==========
-    /**
-     * 公共Token连接方法
-     */
-    const connectToken = async (token) => {
-        const messages = []
-        try {
-            let connectionStatus = tokenStore.getWebSocketStatus(token.id)
-            if (connectionStatus === 'connected') {
-                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 已连接，跳过连接步骤`)
-                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}`)
-                return { success: true, needTry:false, messages }
-            }else if(connectionStatus === 'connecting'){
-                LogUtil.debug(`${token.name} WebSocket 正在连接，等待800ms`)
-                await new Promise(resolve => setTimeout(resolve, 800))
-                connectionStatus = tokenStore.getWebSocketStatus(token.id)
-                messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}`)
-                if (connectionStatus === 'connected') {
-                    return { success: true,needTry:false,  messages }
-                }
-            }else{
-                const autoReconnectEnabled = ref(localStorage.getItem('autoReconnectEnabled') !== 'false')
-                if(!autoReconnectEnabled.value){
-                    messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 当前连接状态: ${connectionStatus}，但不允许自动连接`)
-                    LogUtil.debug(`${token.name} 不允许自动连接，暂不连接ws`)
-                    return { success: false,needTry:false, messages }
-                }
-            }
-            messages.push(`[${new Date().toLocaleString()}] 正在为 Token ${token.name} 建立 WebSocket 连接...`)
-            await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl)
-
-            await new Promise((resolve, reject) => {
-                let waitTime = 0
-                const checkTimer = setInterval(() => {
-                    const currentStatus = tokenStore.getWebSocketStatus(token.id)
-                    waitTime += DELAY_MEDIUM
-
-                    if (currentStatus === 'connected') {
-                        clearInterval(checkTimer)
-                        messages.push(`[${new Date().toLocaleString()}] Token ${token.name} 连接成功`)
-                        resolve(true)
-                    } else if (currentStatus === 'error' || waitTime >= CONNECT_TIMEOUT) {
-                        clearInterval(checkTimer)
-                        const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败/超时（已等待 ${CONNECT_TIMEOUT/1000} 秒）`
-                        messages.push(errorMsg)
-                        reject(new Error(errorMsg))
-                    }
-                }, DELAY_MEDIUM)
-            })
-
-            return { success: true,needTry:false,  messages }
-        } catch (error) {
-            const errorMsg = `[${new Date().toLocaleString()}] Token ${token.name} 连接失败: ${error.message}`
-            messages.push(errorMsg)
-            return { success: false, needTry:true,  messages }
-        }
-    }
-
     // ========== 公共Token重试框架 ==========
     /**
      * 公共Token执行+失败重试框架
@@ -150,7 +96,7 @@ export function useTaskManager(options) {
 
         try {
             // 1. 公共连接逻辑
-            const connectResult = await connectToken(token)
+            const connectResult = await ensureWebSocketConnected(token)
             allMessages = [...allMessages, ...connectResult.messages]
 
             if (!connectResult.success) {
@@ -171,15 +117,15 @@ export function useTaskManager(options) {
                 throw new Error(`Token ${token.name} ${options.taskName} 业务执行失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}）`)
             }
         } catch (error) {
-            allMessages.push(`[${new Date().toLocaleString()}] 错误：${error.message}`)
+            allMessages.push(`[${token.name}] 错误：${error.message}`)
 
             // 3. 重试逻辑
             if (retryCount < MAX_RETRY_TIMES) {
-                allMessages.push(`[${new Date().toLocaleString()}] 将在 ${RETRY_INTERVAL_MS/60000} 分钟后进行第 ${retryCount + 1} 次重试...`)
+                allMessages.push(`[${token.name}] 将在 ${RETRY_INTERVAL_MS/60000} 分钟后进行第 ${retryCount + 1} 次重试...`)
                 await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL_MS))
                 return await processTokenWithRetry(token, retryCount + 1)
             } else {
-                allMessages.push(`[${new Date().toLocaleString()}] 已达最大重试次数（${MAX_RETRY_TIMES}次），${options.taskName} 任务最终失败`)
+                allMessages.push(`[${token.name}] 已达最大重试次数（${MAX_RETRY_TIMES}次），${options.taskName} 任务最终失败`)
                 return { success: false, allMessages }
             }
         }
@@ -252,9 +198,15 @@ export function useTaskManager(options) {
 
     // ========== 公共任务生命周期管理 ==========
     /**
-     * 启动任务
+     * 启动任务（带防重入控制）
      */
     const startTask = (fixTimeTask = false) => {
+        // 🔒 防止重复启动
+        if (taskStartingLock.value[TASK_ID]) {
+            message.warning(`${options.taskName}任务正在启动中，请勿重复操作`)
+            return
+        }
+
         // 验证间隔
         validateInterval(fixTimeTask)
 
@@ -263,14 +215,27 @@ export function useTaskManager(options) {
             timedTaskManager.deleteTask(TASK_ID)
         }
 
+        // 🔒 加锁
+        taskStartingLock.value[TASK_ID] = true
+
         // 创建新任务
         const success = timedTaskManager.createTask({
             id: TASK_ID,
-            fn: batchProcessTokens,
+            fn: async () => {
+                try {
+                    await batchProcessTokens()
+                } finally {
+                    // 🔓 解锁（无论成功失败）
+                    taskStartingLock.value[TASK_ID] = false
+                }
+            },
             interval: validatedInterval.value * 60 * 1000,
             immediate: true,
             maxRetry: 3,
             onError: async (error) => {
+                // 🔓 确保错误时也解锁（双重保险）
+                taskStartingLock.value[TASK_ID] = false
+
                 const batchId = generateBatchId()
                 logBatches.value.push({
                     batchId,
@@ -297,6 +262,8 @@ export function useTaskManager(options) {
             })
             message.success(`${options.taskName}任务已启动（间隔：${validatedInterval.value} 分钟）`)
         } else {
+            // 🔓 创建失败也要解锁
+            taskStartingLock.value[TASK_ID] = false
             message.error(`${options.taskName}任务启动失败，请检查任务配置`)
         }
     }
@@ -348,16 +315,32 @@ export function useTaskManager(options) {
     /**
      * 重启任务
      */
-    const restartTask = (fixTimeTask =false) => {
+    const restartTask = (fixTimeTask = false) => {
         // 验证间隔（允许重启时更新间隔）
         validateInterval(fixTimeTask)
 
         // 暂停原有任务
         timedTaskManager.pauseTask(TASK_ID)
 
+        // 🔒 防重入
+        if (taskStartingLock.value[TASK_ID]) {
+            message.warning(`${options.taskName}任务正在启动中，请稍后再试`)
+            return
+        }
+
+        // 🔒 加锁
+        taskStartingLock.value[TASK_ID] = true
+
         // 重启任务（更新间隔）
         const success = timedTaskManager.restartTask(TASK_ID, {
-            interval: validatedInterval.value * 60 * 1000
+            interval: validatedInterval.value * 60 * 1000,
+            fn: async () => {
+                try {
+                    await batchProcessTokens()
+                } finally {
+                    taskStartingLock.value[TASK_ID] = false
+                }
+            }
         })
 
         if (success) {
@@ -375,6 +358,8 @@ export function useTaskManager(options) {
             })
             message.success(`${options.taskName}任务已重启（间隔：${validatedInterval.value} 分钟），执行计数已重置`)
         } else {
+            // 🔓 失败解锁
+            taskStartingLock.value[TASK_ID] = false
             message.error(`${options.taskName}任务重启失败，请重试`)
         }
     }
@@ -472,6 +457,8 @@ export function useTaskManager(options) {
         }
         // 暂停任务
         timedTaskManager.pauseTask(TASK_ID)
+        // 🔓 确保卸载时释放锁（安全兜底）
+        delete taskStartingLock.value[TASK_ID]
         // 记录日志
         const batchId = generateBatchId()
         logBatches.value.push({
