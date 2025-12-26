@@ -12,8 +12,6 @@ const RETRY_INTERVAL_MS = 30 * 1000
 const MAX_RETRY_TIMES = 10
 const DEFAULT_INTERVAL_MINUTES = 381
 
-// 🔒 任务启动锁（按 TASK_ID 隔离）
-const taskStartingLock = ref({})
 
 /**
  * 公共任务管理 Composable
@@ -37,7 +35,7 @@ export function useTaskManager(options) {
     // 新增：调度类型与表达式（向后兼容）
     const scheduleType = options.scheduleType || 'interval'
     const cronExpression = options.cronExpression
-
+    const immediate = options.immediate
     // 原有 interval 配置（仅 interval 模式使用）
     const intervalMinutes = ref('')
     const validatedInterval = ref(DEFAULT_INTERVAL_MINUTES)
@@ -167,11 +165,6 @@ export function useTaskManager(options) {
 
     // ========== 任务生命周期（关键改造点）==========
     const startTask = (fixTimeTask = false) => {
-        if (taskStartingLock.value[TASK_ID]) {
-            message.warning(`${options.taskName}任务正在启动中，请勿重复操作`)
-            return
-        }
-
         // 仅 interval 模式需要验证输入
         if (scheduleType === 'interval') {
             validateInterval(fixTimeTask)
@@ -182,8 +175,6 @@ export function useTaskManager(options) {
             timedTaskManager.deleteTask(TASK_ID)
         }
 
-        taskStartingLock.value[TASK_ID] = true
-
         // 构建任务参数
         const taskConfig = {
             id: TASK_ID,
@@ -191,13 +182,12 @@ export function useTaskManager(options) {
                 try {
                     await batchProcessTokens()
                 } finally {
-                    taskStartingLock.value[TASK_ID] = false
+
                 }
             },
-            immediate: true,
+            immediate: immediate,
             maxRetry: 3,
             onError: async (error) => {
-                taskStartingLock.value[TASK_ID] = false
                 const batchId = generateBatchId()
                 logBatches.value.push({
                     batchId,
@@ -216,7 +206,6 @@ export function useTaskManager(options) {
         if (scheduleType === 'cron') {
             if (!cronExpression) {
                 message.error('Cron 模式必须提供 cronExpression')
-                taskStartingLock.value[TASK_ID] = false
                 return
             }
             taskConfig.scheduleType = 'cron'
@@ -241,7 +230,6 @@ export function useTaskManager(options) {
             })
             message.success(`${options.taskName}任务已启动（模式：${scheduleType}${scheduleType === 'cron' ? `, cron: ${cronExpression}` : `, 间隔：${validatedInterval.value} 分钟`})`)
         } else {
-            taskStartingLock.value[TASK_ID] = false
             message.error(`${options.taskName}任务启动失败`)
         }
     }
@@ -288,23 +276,13 @@ export function useTaskManager(options) {
         if (scheduleType === 'interval') {
             validateInterval(fixTimeTask)
         }
-
         timedTaskManager.pauseTask(TASK_ID)
-
-        if (taskStartingLock.value[TASK_ID]) {
-            message.warning(`${options.taskName}任务正在启动中`)
-            return
-        }
-
-        taskStartingLock.value[TASK_ID] = true
-
         // 构建重启参数
         const restartConfig = {
             fn: async () => {
                 try {
                     await batchProcessTokens()
                 } finally {
-                    taskStartingLock.value[TASK_ID] = false
                 }
             }
         }
@@ -312,9 +290,11 @@ export function useTaskManager(options) {
         if (scheduleType === 'cron') {
             restartConfig.scheduleType = 'cron'
             restartConfig.cronExpression = cronExpression
+            restartConfig.immediate = immediate
         } else {
             restartConfig.scheduleType = 'interval'
             restartConfig.interval = validatedInterval.value * 60 * 1000
+            restartConfig.immediate = immediate
         }
 
         const success = timedTaskManager.restartTask(TASK_ID, restartConfig)
@@ -334,7 +314,6 @@ export function useTaskManager(options) {
             })
             message.success(`${options.taskName}任务已重启（模式：${scheduleType}${scheduleType === 'cron' ? `, cron: ${cronExpression}` : `, 间隔：${validatedInterval.value} 分钟`})，执行计数已重置`)
         } else {
-            taskStartingLock.value[TASK_ID] = false
             message.error(`${options.taskName}任务重启失败`)
         }
     }
@@ -411,7 +390,6 @@ export function useTaskManager(options) {
     onUnmounted(() => {
         if (countdownFrame) cancelAnimationFrame(countdownFrame)
         timedTaskManager.pauseTask(TASK_ID)
-        delete taskStartingLock.value[TASK_ID]
         const batchId = generateBatchId()
         logBatches.value.push({
             batchId,

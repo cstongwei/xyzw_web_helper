@@ -146,6 +146,7 @@ import { Pause, Play, PlayCircle, Refresh, DocumentText } from '@vicons/ionicons
 import { NIcon, NButton, NBadge, NInput, NModal } from 'naive-ui'
 import { useTaskManager } from '@/composables/useTaskManager'
 import { ref } from 'vue'
+import {createSharedLogger} from "@/utils/sharedLogger.js";
 
 // 新增：控制日志弹窗显示
 const isLogModalOpen = ref(false)
@@ -163,17 +164,18 @@ const ADD_TIME_COUNT = 4 // 加钟执行次数
  */
 const executeHangupBusiness = async (token) => {
   const messages = []
+  const createLog = createSharedLogger(token.name, messages);
   try {
     // 领取挂机奖励
-    messages.push(`[${new Date().toLocaleString()}] 为 ${token.name} 执行${'领取挂机'}操作...`)
+    createLog(`执行${'领取挂机'}操作...`)
     const claimSuccess = tokenStore.sendMessage(token.id, 'system_claimhangupreward')
     if (!claimSuccess) throw new Error(`${token.name} 领取挂机奖励指令发送失败`)
-    messages.push(`[${new Date().toLocaleString()}] ${token.name} ${'领取挂机'}操作成功`)
+    createLog(`${'领取挂机'}操作成功`, 'success')
 
     await new Promise(resolve => setTimeout(resolve, DELAY_SHORT))
 
     // 执行加钟操作
-    messages.push(`[${new Date().toLocaleString()}] 为 ${token.name} 执行${'加钟'}操作（共${ADD_TIME_COUNT}次）...`)
+    createLog(`执行${'加钟'}操作（共${ADD_TIME_COUNT}次）...`,'success')
     const addTimeTasks = []
     for (let i = 0; i < ADD_TIME_COUNT; i++) {
       addTimeTasks.push(new Promise((resolve) => {
@@ -184,9 +186,9 @@ const executeHangupBusiness = async (token) => {
               { isSkipShareCard: true, type: 2 }
           )
           if (addSuccess) {
-            messages.push(`[${new Date().toLocaleString()}] ${token.name} ${'加钟'}操作第 ${i+1} 次执行成功`)
+            createLog(`加钟操作第 ${i + 1} 次执行成功`, 'success')
           } else {
-            messages.push(`[${new Date().toLocaleString()}] ${token.name} ${'加钟'}操作第 ${i+1} 次执行失败`)
+            createLog(`加钟操作第 ${i + 1} 次执行失败`, 'error')
           }
           resolve()
         }, i * DELAY_SHORT)
@@ -195,14 +197,14 @@ const executeHangupBusiness = async (token) => {
     await Promise.all(addTimeTasks)
 
     // 最终刷新状态
-    messages.push(`[${new Date().toLocaleString()}] 为 ${token.name} 执行最终状态刷新...`)
+    createLog(`执行最终状态刷新...`)
     tokenStore.sendMessage(token.id, 'role_getroleinfo')
-    messages.push(`[${new Date().toLocaleString()}] ${token.name} 挂机+加钟任务处理完成`)
+    createLog(`挂机+加钟任务处理完成`, 'success')
 
     return { success: true, messages }
   } catch (error) {
-    const errorMsg = `[${new Date().toLocaleString()}] ${token.name} 挂机+加钟任务处理失败: ${error.message}`
-    messages.push(errorMsg)
+    const errorMsg = `挂机+加钟任务处理失败: ${error.message}`
+    createLog(errorMsg, 'error')
     return { success: false, messages }
   }
 }
@@ -236,6 +238,7 @@ const {
   taskName: '挂机收益+加钟', // 任务名称
   scheduleType: 'cron',
   cronExpression: '31 2,8,14,21 * * *',
+  immediate: true,
   executeBusiness: executeHangupBusiness // 差异化业务逻辑
 })
 </script>

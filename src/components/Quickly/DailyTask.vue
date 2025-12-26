@@ -554,57 +554,50 @@ const {
   taskName: '每日任务',
   scheduleType: 'cron',
   cronExpression: '11 1,11,17,22 * * *',
+  immediate: true,
   executeBusiness: executeDailyBusiness,
   getNextExecuteTime: getNextDailyExecuteTime
 })
 
 // 立即执行所有 Token 的任务
-const executeAllTokensNow = async () => {
-  if (!tokenStore.hasTokens) {
-    message.warning('暂无账号可执行任务')
-    return
-  }
-
-  const batchId = Date.now()
-  const batchLog = {
-    batchId,
-    mainMessage: `[${new Date().toLocaleString()}] 手动立即执行每日任务 - 共${tokenStore.gameTokens.length}个账号`,
-    tokenDetails: [],
-    type: 'info'
-  }
-
-  for (let i = 0; i < tokenStore.gameTokens.length; i++) {
-    const token = tokenStore.gameTokens[i];
-    selectedTokenId.value = token.id;
-    const result = await executeDailyBusiness(token);
-    batchLog.tokenDetails.push({
-      tokenId: token.id,
-      tokenName: token.name || '未知角色',
-      status: result.success ? 'success' : 'error',
-      messages: result.messages
-    });
-
-    // 如果不是最后一个 token，则等待 10 秒
-    if (i < tokenStore.gameTokens.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 10000));
-    }
-  }
-
-  logBatches.value.push(batchLog)
-  executeCount.value++
-  lastExecuteTime.value = new Date().toLocaleString()
-}
-
-// 重写启动逻辑
+// const executeAllTokensNow = async () => {
+//   if (!tokenStore.hasTokens) {
+//     message.warning('暂无账号可执行任务')
+//     return
+//   }
+//
+//   const batchId = Date.now()
+//   const batchLog = {
+//     batchId,
+//     mainMessage: `[${new Date().toLocaleString()}] 手动立即执行每日任务 - 共${tokenStore.gameTokens.length}个账号`,
+//     tokenDetails: [],
+//     type: 'info'
+//   }
+//
+//   for (let i = 0; i < tokenStore.gameTokens.length; i++) {
+//     const token = tokenStore.gameTokens[i];
+//     selectedTokenId.value = token.id;
+//     const result = await executeDailyBusiness(token);
+//     batchLog.tokenDetails.push({
+//       tokenId: token.id,
+//       tokenName: token.name || '未知角色',
+//       status: result.success ? 'success' : 'error',
+//       messages: result.messages
+//     });
+//
+//     // 如果不是最后一个 token，则等待 10 秒
+//     if (i < tokenStore.gameTokens.length - 1) {
+//       await new Promise(resolve => setTimeout(resolve, 10000));
+//     }
+//   }
+//
+//   logBatches.value.push(batchLog)
+//   executeCount.value++
+//   lastExecuteTime.value = new Date().toLocaleString()
+// }
 const startTask = async () => {
-  const config = getCurrentAccountConfig()
   // 启动任务管理器
   startDailyTask(true)
-  // 如果需要立即执行
-  // if (config.shouldExecuteNow) {
-  //   await executeAllTokensNow()
-  // }
-  // 更新下次执行时间显示
   updateNextExecuteTimeDisplay()
 
   // 启动倒计时更新

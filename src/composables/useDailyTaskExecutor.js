@@ -11,6 +11,7 @@ import {
     markCompeteToday,
     isBetweenTime, isTodayInWeekdays, ensureWebSocketConnected
 } from '@/utils/CommonUtil.js';
+import {createSharedLogger} from "@/utils/sharedLogger.js";
 // 每日任务列表
 const tasks = ref([
     { id: 1, name: '登录一次游戏', completed: false, loading: false },
@@ -126,7 +127,7 @@ export default function useDailyTaskExecutor() {
     // 同步服务器任务完成状态
     const syncCompleteFromServer = (resp) => {
         if (!resp?.role?.dailyTask?.complete) {
-            LogUtil.info('角色信息中无任务完成数据', 'warning')
+            LogUtil.info('角色信息中无任务完成数据')
             return
         }
 
@@ -172,11 +173,10 @@ export default function useDailyTaskExecutor() {
             tokenName,          // 必需：token 名称
             roleInfo,          // 必需：角色信息
             settings,          // 必需：设置对象
-            logFn,             // 必需：日志函数 (message, type?)
+            createLogFn,             // 必需：日志函数 (message, type?)
             progressFn         // 可选：进度回调函数 (tokenId, progress)
         } = params
         LogUtil.info(`tokenId: ${tokenId}`);
-        // LogUtil.info(`roleInfo: ${JSON.stringify(roleInfo)}`);
         LogUtil.info(`settings: ${JSON.stringify(settings)}`);
         const roleData = roleInfo?.role
         if (!roleData) throw new Error('角色数据不存在')
@@ -188,8 +188,8 @@ export default function useDailyTaskExecutor() {
         // const teamInfo = await tokenStore.sendMessageWithPromise(tokenId, 'presetteam_getinfo', {}, 8000)
         const teamInfo =  await executeGameCommand(tokenId,tokenName, 'presetteam_getinfo', {}, '获取阵容信息',8000);
         let originalFormation = teamInfo?.presetTeamInfo?.useTeamId ?? 1;
-        logFn(`当前阵容信息${JSON.stringify(teamInfo)}`, 'info')
-        logFn('开始执行每日任务补差')
+        createLogFn(`当前阵容信息${JSON.stringify(teamInfo)}`, 'info')
+        createLogFn('开始执行每日任务补差', 'info')
 
         // 构建任务列表
         const taskList = []
@@ -308,23 +308,23 @@ export default function useDailyTaskExecutor() {
             taskList.push({
                 name: '竞技场战斗',
                 execute: async () => {
-                    logFn('开始竞技场战斗流程')
+                    createLogFn('开始竞技场战斗流程')
 
                     if (new Date().getHours() < 8) {
-                        logFn('当前时间未到8点，跳过竞技场战斗', 'warning')
+                        createLogFn('当前时间未到8点，跳过竞技场战斗', 'warning')
                         return
                     }
 
                     if (new Date().getHours() > 22) {
-                        logFn('当前时间已过22点，跳过竞技场战斗', 'warning')
+                        createLogFn('当前时间已过22点，跳过竞技场战斗', 'warning')
                         return
                     }
 
-                    await switchToFormationIfNeeded(tokenId,tokenName, settings.arenaFormation, '竞技场阵容', logFn)
+                    await switchToFormationIfNeeded(tokenId,tokenName, settings.arenaFormation, '竞技场阵容', createLogFn)
                     //开始竞技场
                     await executeGameCommand(tokenId, tokenName,'arena_startarea', {}, '开始竞技场')
                     for (let i = 1; i <= 3; i++) {
-                        logFn(`竞技场战斗 ${i}/3`)
+                        createLogFn(`竞技场战斗 ${i}/3`)
 
 
                         // 获取目标
@@ -333,7 +333,7 @@ export default function useDailyTaskExecutor() {
                             targets = await executeGameCommand(tokenId, tokenName,'arena_getareatarget',
                                 {}, `获取竞技场目标${i}`)
                         } catch (err) {
-                            logFn(`竞技场战斗${i} - 获取对手失败: ${err.message}`, 'error')
+                            createLogFn(`竞技场战斗${i} - 获取对手失败: ${err.message}`, 'error')
                             break
                         }
 
@@ -342,7 +342,7 @@ export default function useDailyTaskExecutor() {
                             await executeGameCommand(tokenId, tokenName,'fight_startareaarena',
                                 { targetId }, `竞技场战斗${i}`, 10000)
                         } else {
-                            logFn(`竞技场战斗${i} - 未找到目标`, 'warning')
+                            createLogFn(`竞技场战斗${i} - 未找到目标`, 'warning')
                         }
                         if(i===2){
                             markCompeteToday(tokenId,13)
@@ -365,7 +365,7 @@ export default function useDailyTaskExecutor() {
             if (remainingLegionBoss > 0) {
                 taskList.push({
                     name: '军团BOSS阵容检查',
-                    execute: () => switchToFormationIfNeeded(tokenId,tokenName, settings.bossFormation, 'BOSS阵容', logFn)
+                    execute: () => switchToFormationIfNeeded(tokenId,tokenName, settings.bossFormation, 'BOSS阵容', createLogFn)
                 })
                 remainingLegionBoss = remainingLegionBoss>2?2:remainingLegionBoss;
                 for (let i = 0; i < remainingLegionBoss; i++) {
@@ -386,7 +386,7 @@ export default function useDailyTaskExecutor() {
         if(isEveryDayBossTime){
             taskList.push({
                 name: '每日BOSS阵容检查',
-                execute: async () => await switchToFormationIfNeeded(tokenId,tokenName, settings.bossFormation, 'BOSS阵容', logFn)
+                execute: async () => await switchToFormationIfNeeded(tokenId,tokenName, settings.bossFormation, 'BOSS阵容', createLogFn )
             })
             // 每日BOSS
             const todayBossId = getTodayBossId()
@@ -550,13 +550,13 @@ export default function useDailyTaskExecutor() {
         taskList.push({
             name: '恢复原始阵容',
             execute: async () => {
-                logFn('所有任务完成，正在切回原始阵容...', 'success')
-                await switchToFormationIfNeeded(tokenId, tokenName,originalFormation,'阵容还原', logFn)
+                createLogFn('所有任务完成，尝试切回原阵容...', 'info')
+                await switchToFormationIfNeeded(tokenId, tokenName,originalFormation,'阵容还原', createLogFn)
             }
         })
         // 执行任务列表
         const totalTasks = taskList.length
-        logFn(`共有 ${totalTasks-1} 个任务待执行`)
+        createLogFn(`共有 ${totalTasks-1} 个任务待执行`)
 
         for (let i = 0; i < totalTasks; i++) {
             const task = taskList[i]
@@ -573,26 +573,26 @@ export default function useDailyTaskExecutor() {
                     await new Promise(resolve => setTimeout(resolve, 500))
                 }
             } catch (error) {
-                logFn(`任务执行失败: ${task.name} - ${error.message}`, 'error')
+                createLogFn(`任务执行失败: ${task.name} - ${error.message}`, 'error')
                 // 继续执行下一个任务
             }
         }
 
         // 确保进度为100%
         if (progressFn) progressFn(tokenId, 100)
-        logFn('所有任务执行完成', 'success')
+        createLogFn('所有任务执行完成', 'success')
 
         //答题
         if(!hasCompeteToday(tokenId,'answer_test')){
             await preloadQuestions()
             executeGameCommand(tokenId, tokenName,'study_startgame', {}, `开始答题`);
             // tokenStore.sendMessage(tokenId, 'study_startgame')
-            logFn(`[${tokenId}] 触发答题，等待8秒，防止多账号串题`, 'info')
+            createLogFn(`[${tokenId}] 触发答题，等待8秒，防止多账号串题`, 'info')
             await new Promise(resolve => setTimeout(resolve, 8000))
-            logFn(`[${tokenId}] 答题等待结束`, 'success')
+            createLogFn(`[${tokenId}] 答题等待结束`, 'success')
             markCompeteToday(tokenId,'answer_test')
         } else {
-            logFn(`[${tokenId}] 今天已答题，跳过答题逻辑`, 'warning')
+            createLogFn(`[${tokenId}] 今天已答题，跳过答题逻辑`, 'warning')
             // 最后刷新一次角色信息
             await new Promise(resolve => setTimeout(resolve, 2000))
         }
@@ -611,20 +611,14 @@ export default function useDailyTaskExecutor() {
         localStorage.setItem(key, new Date().toISOString())
 
         const messages = []
-        const logFn = (message, type = 'info') => {
-            const time = new Date().toLocaleTimeString()
-            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️'
-            const messageItem = `${prefix} ${message}`
-            messages.push(messageItem)
-            LogUtil.info(messageItem)
-        }
+        const createLogFn = createSharedLogger(token.name, messages);
         const result = await ensureWebSocketConnected(token);
         if (!result.success) {
             return result;
         }
 
         try {
-            logFn(`开始为 ${token.name} (ID: ${token.id}) 执行每日任务自动补差...`)
+            createLogFn(`开始执行每日任务自动补差...`, 'info')
             const roleInfo = await refreshRoleInfo(token.id,token.name,syncCompleteFromServer)
             if (!roleInfo?.role) {
                 throw new Error('获取角色信息失败或数据异常')
@@ -634,7 +628,7 @@ export default function useDailyTaskExecutor() {
             tokenStore.setBattleVersion(res?.battleData?.version);
             LogUtil.info('BattleVersion='+tokenStore.getBattleVersion())
             const dailyPoint = roleInfo.role.dailyTask?.dailyPoint || 0
-            logFn(`${token.name}当前每日任务进度: ${dailyPoint}/100`)
+            createLogFn(`当前每日任务进度: ${dailyPoint}/100`, 'info')
             const tokenSettings = loadTokenSettings(token.id)
             const settings = tokenSettings || getDefaultConfig()
             // 使用通用的executeDailyTasks
@@ -643,15 +637,15 @@ export default function useDailyTaskExecutor() {
                 tokenName: token.name,
                 roleInfo,
                 settings,
-                logFn,
+                createLogFn,
                 progressFn: () => {}
             })
 
-            logFn(`${token.name} 每日任务自动执行完成`, 'success')
+            createLogFn(`每日任务自动执行完成`, 'success')
             return { success: true, messages }
         } catch (error) {
             const errorMsg = `${token.name} 每日任务执行失败: ${error.message}`
-            logFn(errorMsg, 'error')
+            createLogFn(errorMsg, 'error')
             return { success: false, messages }
         }finally {
             localStorage.removeItem(key)

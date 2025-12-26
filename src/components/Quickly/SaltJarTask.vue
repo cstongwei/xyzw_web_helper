@@ -146,7 +146,8 @@ import { Pause, Play, PlayCircle, Refresh, DocumentText } from '@vicons/ionicons
 import { NIcon, NButton, NBadge, NInput, NModal } from 'naive-ui'
 import { useTaskManager } from '@/composables/useTaskManager'
 import { ref } from 'vue'
-import {createLogMessage, ensureWebSocketConnected, sendGameCommand} from "@/utils/CommonUtil.js";
+import { ensureWebSocketConnected, sendGameCommand} from "@/utils/CommonUtil.js";
+import {createSharedLogger} from "@/utils/sharedLogger.js";
 
 // 新增：控制日志弹窗显示
 const isLogModalOpen = ref(false)
@@ -164,38 +165,37 @@ const DELAY_SHORT = 300 // 业务延迟（ms）
  */
 const executeSaltJarBusiness = async (token) => {
   const messages = []
-  const createLog = (msg) => createLogMessage(token.name, msg);
+  const createLog = createSharedLogger(token.name, messages);
   try {
     await ensureWebSocketConnected(token)
     // 暂停盐罐机器人
-    messages.push(createLog('发送暂停盐罐机器人指令'))
+    createLog('发送暂停盐罐机器人指令', 'info')
 
     const stopBottleSuccess = sendGameCommand(token.id, token.name,'bottlehelper_pause')
     if (!stopBottleSuccess) {
       throw new Error(`${token.name} 暂停盐罐机器人指令发送失败`)
     }
-    messages.push(createLog('暂停盐罐机器人成功'))
+    createLog('暂停盐罐机器人成功', 'success')
 
     await new Promise(resolve => setTimeout(resolve, DELAY_MEDIUM))
 
     // 启动盐罐机器人
-    messages.push(createLog('发生启动盐罐机器人指令'))
+    createLog('发送启动盐罐机器人指令', 'info')
     const startBottleSuccess = sendGameCommand(token.id, token.name,'bottlehelper_start')
     if (!startBottleSuccess){
       throw new Error(`${token.name} 启动盐罐机器人指令发送失败`)
     }
-    messages.push(createLog('成功启动盐罐机器人'))
+    createLog('成功启动盐罐机器人', 'success')
     await new Promise(resolve => setTimeout(resolve, DELAY_SHORT))
 
     // 最终刷新状态
-    messages.push(createLog("角色状态刷新..."))
+    createLog("角色状态刷新...", 'info')
     sendGameCommand(token.id, token.name,'role_getroleinfo')
-    messages.push(createLog("盐罐管理任务处理完成"))
+    createLog("盐罐管理任务处理完成\n", 'success')
 
     return { success: true, messages }
   } catch (error) {
-    const errorMsg =createLog( `盐罐管理任务处理失败: ${error.message}`)
-    messages.push(errorMsg)
+    createLog( `盐罐管理任务处理失败: ${error.message}\n`, 'error')
     return { success: false, messages }
   }
 }
@@ -229,6 +229,7 @@ const {
   scheduleType: 'cron',
   cronExpression: '23 2,8,14,21 * * *',
   taskName: '盐罐机器人管理', // 任务名称
+  immediate: true,
   executeBusiness: executeSaltJarBusiness // 差异化业务逻辑
 })
 </script>

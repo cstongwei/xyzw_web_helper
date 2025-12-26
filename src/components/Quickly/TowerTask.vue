@@ -223,6 +223,7 @@ import {
   switchToFormationIfNeeded
 } from '@/utils/CommonUtil.js';
 import LogUtil from "@/utils/LogUtil.js";
+import {createSharedLogger} from "@/utils/sharedLogger.js";
 // 公共常量
 const DEFAULT_INTERVAL_MINUTES = 60 // 默认间隔60分钟
 const SETTINGS_KEY = 'tower_token_formation_settings'
@@ -352,10 +353,10 @@ const getTowerInfo = async (tokenId, tokenName, logFn, timeoutMs = 8000) => {
     const initialEnergy = store.energy;
     const startTime = Date.now();
 
-    logFn(`[${tokenName}] 发送角色信息刷新指令`);
+    logFn(`发送角色信息刷新指令`);
     sendGameCommand(tokenId, tokenName, 'role_getroleinfo', {});
 
-    logFn(`[${tokenName}] 发送塔信息获取指令`);
+    logFn(`发送塔信息获取指令`);
     sendGameCommand(tokenId, tokenName, 'tower_getinfo', {});
 
     // 轮询等待数据更新
@@ -368,17 +369,17 @@ const getTowerInfo = async (tokenId, tokenName, logFn, timeoutMs = 8000) => {
           (initialEnergy == null && currentTower.energy != null) ;
 
       if (hasUpdated) {
-        logFn(`[${tokenName}] 塔信息已更新：体力=${currentTower.energy || 0}, 层数=${JSON.stringify(currentTower) || '未知'}`);
+        logFn(`塔信息已更新：体力=${currentTower.energy || 0}, 层数=${JSON.stringify(currentTower) || '未知'}`,'success');
         return currentTower;
       }
     }
 
     // 超时
-    logFn(`[${tokenName}] 等待塔信息响应超时（${timeoutMs}ms），使用现有数据`);
+    logFn(`等待塔信息响应超时（${timeoutMs}ms），使用现有数据`,'warning');
     return store;
   } catch (error) {
-    const errorMsg = `[${tokenName}] 获取塔信息异常：${error.message || '未知错误'}`;
-    logFn(errorMsg);
+    const errorMsg = `获取塔信息异常：${error.message || '未知错误'}`;
+    logFn(errorMsg,'error');
     console.error('[getTowerInfo] Error:', error);
     throw error;
   }
@@ -392,19 +393,19 @@ const executeTowerBattle = async (tokenId, tokenName, logFn) => {
   let climbTimeout = null
   let climbCount = 0
 
-  logFn(`[${tokenName}] 开始批量爬塔（最大次数：${MAX_CLIMB_TIMES}次，超时保护：${CLIMB_TIMEOUT/1000}秒）`)
+  logFn(`开始批量爬塔（最大次数：${MAX_CLIMB_TIMES}次，超时保护：${CLIMB_TIMEOUT/1000}秒）`)
 
   try {
     // 超时保护
     climbTimeout = setTimeout(() => {
       stopFlag = true
-      logFn(`[${tokenName}] 爬塔超时，强制终止`)
+      logFn(`爬塔超时，强制终止`,'warning')
     }, CLIMB_TIMEOUT)
 
     // 批量爬塔循环
     for (let i = 0; i < MAX_CLIMB_TIMES; i++) {
       if (stopFlag) {
-        logFn(`[${tokenName}] 检测到停止标记，终止爬塔循环`)
+        logFn(`检测到停止标记，终止爬塔循环`,'warning')
         break
       }
 
@@ -412,20 +413,20 @@ const executeTowerBattle = async (tokenId, tokenName, logFn) => {
       const tower = await getTowerInfo(tokenId,tokenName, logFn);
       const energy = tower?.energy || 0
       // 5. 爬塔核心逻辑
-      logFn(`[${tokenName}] 开始爬塔流程，检查体力`)
+      logFn(`开始爬塔流程，检查体力`)
       if (energy <= 0) {
-        logFn(`[${tokenName}] 体力耗尽（剩余：${energy}），终止爬塔`)
+        logFn(`体力耗尽（剩余：${energy}），终止爬塔`,'success')
         break
       }
       // 执行爬塔
-      logFn(`[${tokenName}] 第${i+1}次爬塔：体力剩余${energy}，发送爬塔指令`)
+      logFn(`第${i+1}次爬塔：体力剩余${energy}，发送爬塔指令`,'success')
       await executeGameCommand(tokenId, tokenName, 'fight_starttower', {}, '爬塔',10000)
       climbCount++
-      logFn(`[${tokenName}] 第${climbCount}次爬塔指令发送成功`)
+      logFn(`第${climbCount}次爬塔指令发送成功`,'success')
 
       // 达到最大次数
       if (i === MAX_CLIMB_TIMES - 1) {
-        logFn(`[${tokenName}] 达到最大爬塔次数（${MAX_CLIMB_TIMES}次），终止循环`)
+        logFn(`达到最大爬塔次数（${MAX_CLIMB_TIMES}次），终止循环`,'success')
         break
       }
 
@@ -433,14 +434,14 @@ const executeTowerBattle = async (tokenId, tokenName, logFn) => {
       await new Promise(res => setTimeout(res, 2000))
     }
     const lastTower = await getTowerInfo(tokenId,tokenName, logFn);
-    logFn(`[${tokenName}] 批量爬塔完成，实际执行：${climbCount}次，剩余体力：${lastTower?.energy || 0}`)
+    logFn(`批量爬塔完成，实际执行：${climbCount}次，剩余体力：${lastTower?.energy || 0}`,'success')
   } catch (error) {
     const errorMsg = `[${tokenName}] 批量爬塔失败：${error.message || '未知错误'}`
-    logFn(errorMsg)
+    logFn(errorMsg,'error')
     throw new Error(errorMsg)
   } finally {
     if (climbTimeout) clearTimeout(climbTimeout)
-    logFn(`[${tokenName}] 爬塔流程结束，共执行${climbCount}次`)
+    logFn(`爬塔流程结束，共执行${climbCount}次`,'success')
   }
 }
 
@@ -449,13 +450,10 @@ const executeTowerBattle = async (tokenId, tokenName, logFn) => {
  */
 const executeSingleTokenBusiness = async (token) => {
   const messages = []
-  const logFn = (message) => {
-    messages.push(message)
-    LogUtil.info(message)
-  }
+  const logFn = createSharedLogger(token.name, messages);
   try {
     // 1. 基础信息
-    logFn(`开始处理${token.name}（ID：${token.id}）爬塔`)
+    logFn(`开始处理爬塔`)
     const conRest = await ensureWebSocketConnected(token);
     if (!conRest.success) {
       return conRest;
@@ -471,20 +469,20 @@ const executeSingleTokenBusiness = async (token) => {
     // 4. 切换阵容
     if(needSwitch){
       await switchToFormationIfNeeded(token.id, token.name, targetFormation, '爬塔阵容', logFn)
-      logFn(`${token.name}当前阵容${origianFormation}爬塔，切换爬塔阵容${targetFormation}`)
+      logFn(`当前阵容${origianFormation}爬塔，切换爬塔阵容${targetFormation}`)
     }else{
-      logFn(`${token.name}当前阵容${origianFormation}爬塔，无需切换阵容`)
+      logFn(`当前阵容${origianFormation}爬塔，无需切换阵容`,'sucess')
     }
     await executeTowerBattle(token.id, token.name, logFn)
     if(needSwitch){
       await switchToFormationIfNeeded(token.id, token.name, origianFormation, '还原阵容', logFn)
     }
 
-    messages.push(`[${token.name}] 爬塔流程完成`)
+    logFn(`爬塔流程完成`,'success')
     return { success: true, messages }
   } catch (error) {
     const errorMsg = `[${token.name} 爬塔处理失败：${error.message}`
-    messages.push(errorMsg)
+    logFn(errorMsg,'error')
     return { success: false, messages }
   }
 }
@@ -514,6 +512,7 @@ const {
   taskName: '塔防任务',
   scheduleType: 'cron',
   cronExpression: '47 2,8,14,21 * * *',
+  immediate: false,
   executeBusiness: executeSingleTokenBusiness,
 })
 

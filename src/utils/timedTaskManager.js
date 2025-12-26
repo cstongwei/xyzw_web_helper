@@ -101,13 +101,13 @@ class TimedTaskManager {
     }
 
     _createElectronTask(task) {
-        const config =
-            task.scheduleType === 'cron'
-                ? { type: 'cron', cron: task.cronExpression,immediate:task.immediate }
-                : { type: 'interval', interval: task.interval,immediate:task.immediate };
-
+        const { scheduleType, cronExpression, interval, immediate } = task;
+        const config = {
+            type: scheduleType,
+            ...(scheduleType === 'cron' ? { cronExpression } : { interval }),
+            immediate,
+        };
         window.schedulerAPI.scheduleTask(task.id, config);
-
         const handler = window.schedulerAPI.onTaskExecute(task.id, async () => {
             await this._executeTask(task);
         });
