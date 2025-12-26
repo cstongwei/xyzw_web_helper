@@ -234,6 +234,8 @@ const {
 } = useTaskManager({
   taskKey: 'hangup', // 唯一标识
   taskName: '挂机收益+加钟', // 任务名称
+  scheduleType: 'cron',
+  cronExpression: '31 2,8,14,21 * * *',
   executeBusiness: executeHangupBusiness // 差异化业务逻辑
 })
 </script>

@@ -146,6 +146,7 @@ import { Pause, Play, PlayCircle, Refresh, DocumentText } from '@vicons/ionicons
 import { NIcon, NButton, NBadge, NInput, NModal } from 'naive-ui'
 import { useTaskManager } from '@/composables/useTaskManager'
 import { ref } from 'vue'
+import {createLogMessage, ensureWebSocketConnected, sendGameCommand} from "@/utils/CommonUtil.js";
 
 // 新增：控制日志弹窗显示
 const isLogModalOpen = ref(false)
@@ -163,37 +164,37 @@ const DELAY_SHORT = 300 // 业务延迟（ms）
  */
 const executeSaltJarBusiness = async (token) => {
   const messages = []
+  const createLog = (msg) => createLogMessage(token.name, msg);
   try {
+    await ensureWebSocketConnected(token)
     // 暂停盐罐机器人
-    messages.push(`[${new Date().toLocaleString()}] 为 ${token.name} 执行${'盐罐机器人'}暂停操作...`)
-    const stopBottleSuccess = tokenStore.sendMessage(token.id, 'bottlehelper_stop')
-    if (!stopBottleSuccess) throw new Error(`${token.name} 暂停盐罐机器人指令发送失败`)
-    messages.push(`[${new Date().toLocaleString()}] ${token.name} ${'盐罐机器人'}暂停操作成功`)
+    messages.push(createLog('发送暂停盐罐机器人指令'))
+
+    const stopBottleSuccess = sendGameCommand(token.id, token.name,'bottlehelper_pause')
+    if (!stopBottleSuccess) {
+      throw new Error(`${token.name} 暂停盐罐机器人指令发送失败`)
+    }
+    messages.push(createLog('暂停盐罐机器人成功'))
 
     await new Promise(resolve => setTimeout(resolve, DELAY_MEDIUM))
 
     // 启动盐罐机器人
-    messages.push(`[${new Date().toLocaleString()}] 为 ${token.name} 执行${'盐罐机器人'}启动操作...`)
-    const startBottleSuccess = tokenStore.sendMessage(token.id, 'bottlehelper_start')
-    if (!startBottleSuccess) throw new Error(`${token.name} 启动盐罐机器人指令发送失败`)
-    messages.push(`[${new Date().toLocaleString()}] ${token.name} ${'盐罐机器人'}启动操作成功`)
-
-    // 刷新角色状态同步盐罐信息
-    messages.push(`[${new Date().toLocaleString()}] 为 ${token.name} 刷新角色信息，同步${'盐罐机器人'}状态...`)
-    const refreshRoleSuccess = tokenStore.sendMessage(token.id, 'role_getroleinfo')
-    if (!refreshRoleSuccess) throw new Error(`${token.name} 刷新角色信息指令发送失败`)
-    messages.push(`[${new Date().toLocaleString()}] ${token.name} 角色信息刷新成功`)
-
+    messages.push(createLog('发生启动盐罐机器人指令'))
+    const startBottleSuccess = sendGameCommand(token.id, token.name,'bottlehelper_start')
+    if (!startBottleSuccess){
+      throw new Error(`${token.name} 启动盐罐机器人指令发送失败`)
+    }
+    messages.push(createLog('成功启动盐罐机器人'))
     await new Promise(resolve => setTimeout(resolve, DELAY_SHORT))
 
     // 最终刷新状态
-    messages.push(`[${new Date().toLocaleString()}] 为 ${token.name} 执行最终状态刷新...`)
-    tokenStore.sendMessage(token.id, 'role_getroleinfo')
-    messages.push(`[${new Date().toLocaleString()}] ${token.name} 盐罐管理任务处理完成`)
+    messages.push(createLog("角色状态刷新..."))
+    sendGameCommand(token.id, token.name,'role_getroleinfo')
+    messages.push(createLog("盐罐管理任务处理完成"))
 
     return { success: true, messages }
   } catch (error) {
-    const errorMsg = `[${new Date().toLocaleString()}] ${token.name} 盐罐管理任务处理失败: ${error.message}`
+    const errorMsg =createLog( `盐罐管理任务处理失败: ${error.message}`)
     messages.push(errorMsg)
     return { success: false, messages }
   }
@@ -225,6 +226,8 @@ const {
   validateInterval
 } = useTaskManager({
   taskKey: 'saltjar', // 唯一标识
+  scheduleType: 'cron',
+  cronExpression: '23 2,8,14,21 * * *',
   taskName: '盐罐机器人管理', // 任务名称
   executeBusiness: executeSaltJarBusiness // 差异化业务逻辑
 })

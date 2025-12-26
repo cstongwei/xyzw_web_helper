@@ -21,7 +21,7 @@ export const sendGameCommand = (tokenId, tokenName,cmd, params = {}, options = {
     try {
         if (description) LogUtil.info(`${tokenName} 执行: ${description}`);
         const tokenStore = useTokenStore();
-        tokenStore.sendMessage(tokenId, cmd,options)
+        return tokenStore.sendMessage(tokenId, cmd,options)
     } catch (error) {
         if (description) LogUtil.error(`${tokenName} ${description} - 失败: ${error.message}`);
         throw error;
@@ -135,7 +135,9 @@ export const markCompeteToday = (tokenId, taskName) => {
     localStorage.setItem(key, 'true');
     LogUtil.info(`标记任务完成: ${key}`);
 };
-
+export const createLogMessage=(tokenName,actionMsg)=>{
+    return `[${new Date().toLocaleString()}] ${tokenName} - ${actionMsg}`
+}
 /**
  * 确保指定 token 的 WebSocket 处于已连接状态
  * @param {Object} token - token 对象，需包含 id, name, token, wsUrl 字段
@@ -146,14 +148,15 @@ export const ensureWebSocketConnected = async (token) => {
     const tokenStore = useTokenStore();
     const DELAY_MEDIUM = 200; // 假设你有这个常量，否则可替换为具体数值如 200
     const CONNECT_TIMEOUT = 5000; // 假设超时5秒，按你项目实际值调整
-
+    const createLog = (msg) => createLogMessage(token.name, msg);
     try {
         let connectionStatus = tokenStore.getWebSocketStatus(token.id);
 
         // 已连接：直接成功
         if (connectionStatus === 'connected') {
-            messages.push(` Token[${token.name}] 已连接，跳过连接步骤`);
-            LogUtil.debug(`${token.name} WebSocket 处于连接状态`);
+            const msg = createLog("已连接，跳过连接步骤");
+            messages.push(msg);
+            LogUtil.debug(msg);
             return { success: true, needTry: false, messages };
         }
 
@@ -165,7 +168,7 @@ export const ensureWebSocketConnected = async (token) => {
                 connectionStatus = tokenStore.getWebSocketStatus(token.id);
             }
             if (connectionStatus === 'connected') {
-                messages.push(`Token[${token.name}] 连接成功（等待后）`);
+                messages.push(createLog("连接成功（等待后）"));
                 return { success: true, needTry: false, messages };
             }
         }
@@ -173,13 +176,14 @@ export const ensureWebSocketConnected = async (token) => {
         // 检查是否允许自动重连
         const autoReconnectEnabled = localStorage.getItem('autoReconnectEnabled') !== 'false';
         if (!autoReconnectEnabled) {
-            messages.push(`Token[${token.name}] 当前连接状态: ${connectionStatus}，但不允许自动连接`);
-            LogUtil.info(`${token.name} 不允许自动连接，暂不连接ws`);
+            let msg = createLog(`当前连接状态: ${connectionStatus}，但不允许自动连接`)
+            messages.push(msg);
+            LogUtil.info(msg);
             return { success: false, needTry: false, messages };
         }
 
         // 开始连接
-        messages.push(`正在为 Token ${token.name} 建立 WebSocket 连接...`);
+        messages.push(createLog(`尝试建立连接`));
         await tokenStore.createWebSocketConnection(token.id, token.token, token.wsUrl);
 
         // 等待连接结果（带超时）
@@ -191,11 +195,11 @@ export const ensureWebSocketConnected = async (token) => {
 
                 if (currentStatus === 'connected') {
                     clearInterval(checkTimer);
-                    messages.push(`Token[${token.name}] 连接成功`);
+                    messages.push(createLog(`重试连接成功`));
                     resolve(true);
                 } else if (currentStatus === 'error' || waitTime >= CONNECT_TIMEOUT) {
                     clearInterval(checkTimer);
-                    const errorMsg = `Token[${token.name}] 连接失败/超时（已等待 ${CONNECT_TIMEOUT / 1000} 秒）`;
+                    const errorMsg = createLog(`重试连接失败/超时（已等待 ${CONNECT_TIMEOUT / 1000} 秒）`);
                     messages.push(errorMsg);
                     reject(new Error(errorMsg));
                 }
@@ -205,7 +209,7 @@ export const ensureWebSocketConnected = async (token) => {
         return { success: true, needTry: false, messages };
 
     } catch (error) {
-        const errorMsg = `Token[${token.name}] 连接失败: ${error.message}`;
+        const errorMsg = createLog(`创建 WebSocket 连接失败: ${error.message}`);
         messages.push(errorMsg);
         LogUtil.error(`${token.name} 创建 WebSocket 连接时出错:`, error);
         return { success: false, needTry: true, messages };

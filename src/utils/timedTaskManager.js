@@ -1,4 +1,16 @@
+// @ts-nocheck
 import getAppEnvironment from "@/utils/EnvUtil.js";
+import LogUtil from "@/utils/LogUtil.js";
+
+// 仅在非 Electron 环境（即 Web）中动态导入 cron-parser
+let cronParser = null;
+if (typeof window !== 'undefined' && !getAppEnvironment().isDesktop) {
+    import('cron-parser').then(mod => {
+        cronParser = mod.default || mod;
+    }).catch(err => {
+        console.error('[TimedTaskManager] 加载 cron-parser 失败:', err);
+    });
+}
 
 class TimedTaskManager {
     constructor() {
@@ -12,9 +24,37 @@ class TimedTaskManager {
         this.electronTaskHandlers = new Map();
     }
 
-    createTask({ id, fn, interval, immediate = false, maxRetry = 0, onError }) {
+    /**
+     * 创建任务
+     * @param {Object} options
+     * @param {string} options.id - 任务唯一ID
+     * @param {Function} options.fn - 执行函数
+     * @param {number} [options.interval] - 间隔毫秒数（scheduleType=interval 时必需）
+     * @param {string} [options.cronExpression] - Cron 表达式（scheduleType=cron 时必需）
+     * @param {'interval'|'cron'} [options.scheduleType='interval'] - 调度类型
+     * @param {boolean} [options.immediate=false] - 是否立即执行一次
+     * @param {number} [options.maxRetry=0] - 最大重试次数
+     * @param {Function} [options.onError] - 错误回调
+     * @returns {boolean}
+     */
+    createTask({ id, fn, interval, cronExpression, scheduleType = 'interval', immediate = false, maxRetry = 0, onError }) {
         if (this.tasks.has(id)) {
-            console.warn(`[TimedTaskManager] 任务${id}已存在，请勿重复创建`);
+            LogUtil.warn(`[TimedTaskManager] 任务 ${id} 已存在，请勿重复创建`);
+            return false;
+        }
+
+        if (scheduleType === 'cron') {
+            if (!cronExpression) {
+                LogUtil.error('[TimedTaskManager] cron 模式必须提供 cronExpression');
+                return false;
+            }
+        } else if (scheduleType === 'interval') {
+            if (interval == null || interval <= 0) {
+                LogUtil.error('[TimedTaskManager] interval 模式必须提供有效 interval（>0）');
+                return false;
+            }
+        } else {
+            LogUtil.error('[TimedTaskManager] 不支持的 scheduleType:', scheduleType);
             return false;
         }
 
@@ -22,6 +62,8 @@ class TimedTaskManager {
             id,
             fn,
             interval,
+            cronExpression,
+            scheduleType,
             immediate,
             maxRetry,
             onError,
@@ -30,52 +72,125 @@ class TimedTaskManager {
             lastExecuteTime: null,
             timerId: null,
             electronHandler: null,
-            isRetryPaused: false
+            isRetryPaused: false,
+            nextFireTime: null // 仅 Web cron 使用
         };
 
         this.tasks.set(id, task);
         task.status = this.TASK_STATUS.RUNNING;
 
         if (this.env.supportSchedule) {
+            // Electron：委托主进程
             this._createElectronTask(task);
         } else {
-            this._createWebTask(task);
+            // Web：区分调度类型
+            if (scheduleType === 'cron') {
+                this._createWebCronTask(task);
+            } else {
+                this._createWebIntervalTask(task);
+            }
         }
 
-        console.info(`[TimedTaskManager] 任务${id}创建成功，间隔${interval}ms，立即执行:${immediate}，环境:${this.env.isDesktop ? 'Electron' : 'Web'}`);
+        LogUtil.info(
+            `[TimedTaskManager] 任务 ${id} 创建成功`,
+            `类型: ${scheduleType}`,
+            scheduleType === 'cron' ? `cron: ${cronExpression}` : `间隔: ${interval}ms`,
+            `环境: ${this.env.isDesktop ? 'Electron' : 'Web'}`
+        );
         return true;
     }
 
     _createElectronTask(task) {
-        const { id, interval } = task;
+        const config =
+            task.scheduleType === 'cron'
+                ? { type: 'cron', cron: task.cronExpression,immediate:task.immediate }
+                : { type: 'interval', interval: task.interval,immediate:task.immediate };
 
-        window.schedulerAPI.scheduleTask(id, {
-            type: 'interval',
-            interval: interval
-        });
+        window.schedulerAPI.scheduleTask(task.id, config);
 
-        const handler = window.schedulerAPI.onTaskExecute(id, async () => {
+        const handler = window.schedulerAPI.onTaskExecute(task.id, async () => {
             await this._executeTask(task);
         });
 
-        this.electronTaskHandlers.set(id, handler);
+        this.electronTaskHandlers.set(task.id, handler);
         task.electronHandler = handler;
-
-        // if (task.immediate) {
-        //     this._executeTask(task);
-        // }
     }
 
-    _createWebTask(task) {
+    _createWebIntervalTask(task) {
+        const run = async () => {
+            await this._executeTask(task);
+            if (task.status === this.TASK_STATUS.RUNNING) {
+                this._startIntervalCycle(task);
+            }
+        };
+
         if (task.immediate) {
-            this._executeTask(task).then(() => {
-                if (task.status === this.TASK_STATUS.RUNNING) {
-                    this._startCycle(task);
-                }
-            });
+            run();
         } else {
-            this._startCycle(task);
+            this._startIntervalCycle(task);
         }
+    }
+
+    _createWebCronTask(task) {
+        if (!cronParser) {
+            console.error('[TimedTaskManager] cron-parser 未加载，无法创建 cron 任务');
+            if (typeof task.onError === 'function') {
+                task.onError(new Error('缺少 cron-parser 依赖'), task);
+            }
+            this.deleteTask(task.id);
+            return;
+        }
+
+        // 立即安排下一次执行
+        this._scheduleNextCronExecution(task);
+
+        // 如果 immediate 为 true，则额外立即执行一次（不干扰 cron 计划）
+        if (task.immediate) {
+            this._executeTask(task);
+        }
+    }
+
+    _scheduleNextCronExecution(task) {
+        if (!cronParser) return;
+
+        try {
+            const interval = cronParser.parseExpression(task.cronExpression, { currentDate: new Date() });
+            const next = interval.next();
+            task.nextFireTime = next.toDate();
+            const delay = task.nextFireTime.getTime() - Date.now();
+
+            if (delay > 0) {
+                task.timerId = setTimeout(async () => {
+                    await this._executeTask(task);
+                    if (task.status === this.TASK_STATUS.RUNNING) {
+                        this._scheduleNextCronExecution(task);
+                    }
+                }, delay);
+            } else {
+                // 安全兜底：理论上不会发生
+                LogUtil.warn('[TimedTaskManager] cron 下次执行时间已过，重新计算');
+                this._scheduleNextCronExecution(task);
+            }
+        } catch (e) {
+            LogUtil.error(`[TimedTaskManager] cron 表达式解析失败: "${task.cronExpression}"`, e);
+            if (typeof task.onError === 'function') {
+                task.onError(new Error('Cron 表达式无效: ' + e.message), task);
+            }
+            this.deleteTask(task.id);
+        }
+    }
+
+    _startIntervalCycle(task, customInterval) {
+        const interval = customInterval || task.interval;
+        if (task.timerId) {
+            clearTimeout(task.timerId);
+        }
+        task.timerId = setTimeout(async () => {
+            await this._executeTask(task);
+            if (task.status === this.TASK_STATUS.RUNNING) {
+                this._startIntervalCycle(task);
+            }
+        }, interval);
     }
 
     pauseTask(id) {
@@ -89,7 +204,7 @@ class TimedTaskManager {
         }
 
         task.status = this.TASK_STATUS.PAUSED;
-        console.info(`[TimedTaskManager] 任务${id}已暂停`);
+        LogUtil.info(`[TimedTaskManager] 任务 ${id} 已暂停`);
         return true;
     }
 
@@ -100,13 +215,16 @@ class TimedTaskManager {
         if (this.env.supportSchedule) {
             window.schedulerAPI.activateTask(id);
         } else {
-            this._startCycle(task);
+            if (task.scheduleType === 'cron') {
+                this._scheduleNextCronExecution(task);
+            } else {
+                this._startIntervalCycle(task);
+            }
         }
 
         task.isRetryPaused = false;
         task.status = this.TASK_STATUS.RUNNING;
-
-        console.info(`[TimedTaskManager] 任务${id}已恢复`);
+        LogUtil.info(`[TimedTaskManager] 任务 ${id} 已恢复`);
         return true;
     }
 
@@ -115,14 +233,19 @@ class TimedTaskManager {
         if (!task) return false;
 
         this.deleteTask(id);
-        return this.createTask({
+
+        const merged = {
             id: task.id,
             fn: task.fn,
-            interval: newOptions.interval || task.interval,
-            immediate: newOptions.immediate || task.immediate,
-            maxRetry: newOptions.maxRetry || task.maxRetry,
-            onError: newOptions.onError || task.onError
-        });
+            scheduleType: newOptions.scheduleType ?? task.scheduleType,
+            interval: newOptions.interval ?? task.interval,
+            cronExpression: newOptions.cronExpression ?? task.cronExpression,
+            immediate: newOptions.immediate !== undefined ? newOptions.immediate : task.immediate,
+            maxRetry: newOptions.maxRetry ?? task.maxRetry,
+            onError: newOptions.onError ?? task.onError
+        };
+
+        return this.createTask(merged);
     }
 
     deleteTask(id) {
@@ -140,7 +263,7 @@ class TimedTaskManager {
         }
 
         this.tasks.delete(id);
-        console.info(`[TimedTaskManager] 任务${id}已销毁`);
+        LogUtil.info(`[TimedTaskManager] 任务 ${id} 已销毁`);
         return true;
     }
 
@@ -153,10 +276,9 @@ class TimedTaskManager {
                 clearTimeout(task.timerId);
             }
         });
-
         this.tasks.clear();
         this.electronTaskHandlers.clear();
-        console.info(`[TimedTaskManager] 所有任务已清空`);
+        LogUtil.info(`[TimedTaskManager] 所有任务已清空`);
     }
 
     getTaskStatus(id) {
@@ -164,76 +286,65 @@ class TimedTaskManager {
         return task ? task.status : null;
     }
 
+    /**
+     * 获取 cron 任务下次执行时间（仅 Web 端有效）
+     */
+    getNextFireTime(id) {
+        const task = this.tasks.get(id);
+        if (!task || task.scheduleType !== 'cron') return null;
+        if (this.env.supportSchedule) {
+            LogUtil.warn('[TimedTaskManager] Electron 环境无法获取下次执行时间（需主进程支持）');
+            return null;
+        }
+        return task.nextFireTime;
+    }
+
     async _executeTask(task) {
         try {
             task.lastExecuteTime = new Date();
-            console.log(`[TimedTaskManager] 任务${task.id}开始执行 - ${task.lastExecuteTime.toLocaleString()}`);
+            LogUtil.log(`[TimedTaskManager] 任务 ${task.id} 开始执行 - ${task.lastExecuteTime.toLocaleString()}`);
             await task.fn();
 
-            // 执行成功后重置重试计数
-            task.retryCount = 0;
-            console.log(`[TimedTaskManager] 任务${task.id}执行成功`);
+            task.retryCount = 0; // 重置重试计数
+            LogUtil.log(`[TimedTaskManager] 任务 ${task.id} 执行成功`);
 
+            // Electron 重试恢复
             if (this.env.supportSchedule && task.isRetryPaused) {
                 window.schedulerAPI.activateTask(task.id);
                 task.isRetryPaused = false;
-                task.status = this.TASK_STATUS.RUNNING; // 同步本地状态，保证一致性
-                console.info(`[TimedTaskManager] 任务${task.id}恢复主进程定时（重试成功）`);
+                task.status = this.TASK_STATUS.RUNNING;
+                LogUtil.info(`[TimedTaskManager] 任务 ${task.id} 恢复主进程定时（重试成功）`);
             }
         } catch (error) {
-            console.error(`[TimedTaskManager] 任务${task.id}执行失败:`, error);
+            LogUtil.error(`[TimedTaskManager] 任务 ${task.id} 执行失败:`, error);
 
             if (typeof task.onError === 'function') {
                 task.onError(error, task);
             }
 
-            // 仅在任务运行时处理重试
             if (task.status === this.TASK_STATUS.RUNNING) {
                 task.retryCount++;
-
                 if (task.retryCount <= task.maxRetry) {
-                    console.info(`[TimedTaskManager] 任务${task.id}将进行第${task.retryCount}次重试`);
+                    LogUtil.info(`[TimedTaskManager] 任务 ${task.id} 将进行第 ${task.retryCount} 次重试`);
 
                     if (this.env.supportSchedule) {
-                        // Electron环境：暂停主进程任务，避免双定时器
                         this.pauseTask(task.id);
                         task.isRetryPaused = true;
-
                         setTimeout(() => {
-                            const currentTask = this.tasks.get(task.id);
-                            if (currentTask) {
-                                this._executeTask(currentTask);
-                            }
+                            const current = this.tasks.get(task.id);
+                            if (current) this._executeTask(current);
                         }, 1000);
                     } else {
-                        // Web环境：使用自定义间隔启动循环
-                        this._startCycle(task, 1000);
+                        // Web：1秒后重试
+                        this._startIntervalCycle(task, 1000);
                     }
                 } else {
-                    console.error(`[TimedTaskManager] 任务${task.id}重试${task.maxRetry}次失败，停止执行`);
+                    LogUtil.error(`[TimedTaskManager] 任务 ${task.id} 重试 ${task.maxRetry} 次失败，停止执行`);
                     task.isRetryPaused = false;
                     this.deleteTask(task.id);
                 }
             }
         }
-    }
-
-    _startCycle(task, customInterval) {
-        const interval = customInterval || task.interval;
-
-        if (task.timerId) {
-            clearTimeout(task.timerId);
-        }
-
-        task.timerId = setTimeout(async () => {
-            await this._executeTask(task);
-
-            if (task.status === this.TASK_STATUS.RUNNING) {
-                this._startCycle(task);
-            }
-        }, interval);
-
-        console.log(`[TimedTaskManager] 任务${task.id}已安排下一次执行（${interval}ms后）`);
     }
 }
 

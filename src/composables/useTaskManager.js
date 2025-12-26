@@ -3,62 +3,58 @@ import { useTokenStore } from '@/stores/tokenStore'
 import { timedTaskManager } from '@/utils/timedTaskManager'
 import { useMessage } from 'naive-ui'
 import LogUtil from "@/utils/LogUtil.js";
-import {ensureWebSocketConnected} from "@/utils/CommonUtil.js";
+import { ensureWebSocketConnected } from "@/utils/CommonUtil.js";
 
 // 公共常量
-const CONNECT_TIMEOUT = 15000 // WebSocket 连接超时（ms）
-const DELAY_MEDIUM = 500 // 连接检查间隔（ms）
-const RETRY_INTERVAL_MS = 30 * 1000 // 失败重试间隔：30秒
-const MAX_RETRY_TIMES = 10 // 最大重试次数
-const DEFAULT_INTERVAL_MINUTES = 381 // 默认间隔分钟
+const CONNECT_TIMEOUT = 15000
+const DELAY_MEDIUM = 500
+const RETRY_INTERVAL_MS = 30 * 1000
+const MAX_RETRY_TIMES = 10
+const DEFAULT_INTERVAL_MINUTES = 381
 
-// 🔒 新增：任务启动锁（按 TASK_ID 隔离）
+// 🔒 任务启动锁（按 TASK_ID 隔离）
 const taskStartingLock = ref({})
 
 /**
  * 公共任务管理 Composable
  * @param {Object} options - 任务配置
  * @param {string} options.taskKey - 任务唯一标识（如 'hangup'/'saltjar'）
- * @param {string} options.taskName - 任务名称（如 '挂机收益+加钟'/'盐罐管理'）
- * @param {Function} options.executeBusiness - 子组件提供的业务逻辑 (token) => Promise<{success: boolean, messages: string[]}>
- * @returns {Object} 公共任务能力
+ * @param {string} options.taskName - 任务名称
+ * @param {Function} options.executeBusiness - 业务逻辑 (token) => Promise<{success: boolean, messages: string[]}>
+ * @param {'interval'|'cron'} [options.scheduleType='interval'] - 调度类型（新增）
+ * @param {string} [options.cronExpression] - Cron 表达式（仅 scheduleType='cron' 时有效）
  */
 export function useTaskManager(options) {
-    // 校验必填配置
+    // 校验必填
     if (!options.taskKey || !options.taskName || typeof options.executeBusiness !== 'function') {
         throw new Error('taskKey、taskName、executeBusiness 为必填配置')
     }
 
-    // 状态初始化
     const tokenStore = useTokenStore()
     const message = useMessage()
-    const TASK_ID = `task-${options.taskKey}` // 全局唯一任务ID
+    const TASK_ID = `task-${options.taskKey}`
 
-    // 任务配置
-    const intervalMinutes = ref('') // 输入框值（字符串）
-    const validatedInterval = ref(DEFAULT_INTERVAL_MINUTES) // 验证后的间隔（数字）
+    // 新增：调度类型与表达式（向后兼容）
+    const scheduleType = options.scheduleType || 'interval'
+    const cronExpression = options.cronExpression
+
+    // 原有 interval 配置（仅 interval 模式使用）
+    const intervalMinutes = ref('')
+    const validatedInterval = ref(DEFAULT_INTERVAL_MINUTES)
 
     // 任务状态
-    const taskStatus = ref('idle') // running/paused/error/idle
+    const taskStatus = ref('idle')
     const executeCount = ref(0)
     const lastExecuteTime = ref('')
     const nextExecuteTime = ref('')
     const countdownText = ref('00:00:00')
     const logBatches = ref([])
     const expandedBatchIds = ref(new Set())
-    let countdownFrame = null // 倒计时动画帧
+    let countdownFrame = null
 
-    // ========== 公共工具方法 ==========
-    /**
-     * 生成批次ID
-     */
-    const generateBatchId = () => {
-        return Date.now() + '-' + Math.random().toString(36).substr(2, 9)
-    }
+    // ========== 工具方法（不变）==========
+    const generateBatchId = () => Date.now() + '-' + Math.random().toString(36).substr(2, 9)
 
-    /**
-     * 日志关键词高亮
-     */
     const formatLogMsg = (msg) => {
         if (!msg) return ''
         const keywords = ['领取挂机', '加钟', '盐罐机器人', '爬塔', '体力', '阵容', 'Token']
@@ -70,13 +66,9 @@ export function useTaskManager(options) {
         return formattedMsg
     }
 
-    /**
-     * 验证执行间隔
-     */
+    // ⚠️ 注意：validateInterval 仅对 interval 模式有效
     const validateInterval = (fixTimeTask) => {
-        if(fixTimeTask){
-            return
-        }
+        if (fixTimeTask || scheduleType !== 'interval') return
         const inputVal = Number(intervalMinutes.value)
         if (!intervalMinutes.value || isNaN(inputVal) || inputVal < 1) {
             validatedInterval.value = DEFAULT_INTERVAL_MINUTES
@@ -87,30 +79,21 @@ export function useTaskManager(options) {
         }
     }
 
-    // ========== 公共Token重试框架 ==========
-    /**
-     * 公共Token执行+失败重试框架
-     */
+    // ========== Token 重试 & 批处理（不变）==========
     const processTokenWithRetry = async (token, retryCount = 0) => {
         let allMessages = []
-
         try {
-            // 1. 公共连接逻辑
             const connectResult = await ensureWebSocketConnected(token)
             allMessages = [...allMessages, ...connectResult.messages]
-
             if (!connectResult.success) {
-                if (connectResult.needTry){
+                if (connectResult.needTry) {
                     throw new Error(`Token ${token.name} 连接失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}）`)
-                }else{
+                } else {
                     return { success: false, allMessages }
                 }
             }
-
-            // 2. 执行子组件提供的业务逻辑
             const businessResult = await options.executeBusiness(token)
             allMessages = [...allMessages, ...businessResult.messages]
-
             if (businessResult.success) {
                 return { success: true, allMessages }
             } else {
@@ -118,10 +101,8 @@ export function useTaskManager(options) {
             }
         } catch (error) {
             allMessages.push(`[${token.name}] 错误：${error.message}`)
-
-            // 3. 重试逻辑
             if (retryCount < MAX_RETRY_TIMES) {
-                allMessages.push(`[${token.name}] 将在 ${RETRY_INTERVAL_MS/60000} 分钟后进行第 ${retryCount + 1} 次重试...`)
+                allMessages.push(`[${token.name}] 将在 ${RETRY_INTERVAL_MS / 60000} 分钟后进行第 ${retryCount + 1} 次重试...`)
                 await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL_MS))
                 return await processTokenWithRetry(token, retryCount + 1)
             } else {
@@ -131,16 +112,11 @@ export function useTaskManager(options) {
         }
     }
 
-    // ========== 公共批量处理逻辑 ==========
-    /**
-     * 批量处理Token（通用逻辑）
-     */
     const batchProcessTokens = async () => {
         const tokens = tokenStore.gameTokens || []
         const batchId = generateBatchId()
         const currentTime = new Date().toLocaleString()
 
-        // 无Token处理
         if (tokens.length === 0) {
             const emptyBatch = {
                 batchId,
@@ -157,7 +133,6 @@ export function useTaskManager(options) {
             return
         }
 
-        // 初始化批次日志
         const batchRecord = {
             batchId,
             timestamp: currentTime,
@@ -168,7 +143,6 @@ export function useTaskManager(options) {
         logBatches.value.push(batchRecord)
         message.info(batchRecord.mainMessage)
 
-        // 遍历处理Token（单个失败不阻塞）
         for (const token of tokens) {
             const tokenDetail = {
                 tokenName: token.name || '未知Token',
@@ -176,66 +150,54 @@ export function useTaskManager(options) {
                 status: 'success',
                 messages: []
             }
-
-            // 调用公共重试框架
             const result = await processTokenWithRetry(token, 0)
-
             tokenDetail.messages = result.allMessages
             tokenDetail.status = result.success ? 'success' : 'error'
             batchRecord.tokenDetails.push(tokenDetail)
         }
 
-        // 更新批次日志
         batchRecord.type = batchRecord.tokenDetails.some(t => t.status === 'error') ? 'error' : 'success'
         batchRecord.mainMessage = `[${new Date().toLocaleString()}] ${options.taskName}任务处理完成，成功：${batchRecord.tokenDetails.filter(t => t.status === 'success').length} / 失败：${batchRecord.tokenDetails.filter(t => t.status === 'error').length}`
 
-        // 更新任务统计
         executeCount.value += 1
         lastExecuteTime.value = new Date().toLocaleString()
         calculateNextExecuteTime()
         message.success(batchRecord.mainMessage)
     }
 
-    // ========== 公共任务生命周期管理 ==========
-    /**
-     * 启动任务（带防重入控制）
-     */
+    // ========== 任务生命周期（关键改造点）==========
     const startTask = (fixTimeTask = false) => {
-        // 🔒 防止重复启动
         if (taskStartingLock.value[TASK_ID]) {
             message.warning(`${options.taskName}任务正在启动中，请勿重复操作`)
             return
         }
 
-        // 验证间隔
-        validateInterval(fixTimeTask)
+        // 仅 interval 模式需要验证输入
+        if (scheduleType === 'interval') {
+            validateInterval(fixTimeTask)
+        }
 
-        // 删除原有任务（防止重复）
+        // 清理旧任务
         if (timedTaskManager.getTaskStatus(TASK_ID)) {
             timedTaskManager.deleteTask(TASK_ID)
         }
 
-        // 🔒 加锁
         taskStartingLock.value[TASK_ID] = true
 
-        // 创建新任务
-        const success = timedTaskManager.createTask({
+        // 构建任务参数
+        const taskConfig = {
             id: TASK_ID,
             fn: async () => {
                 try {
                     await batchProcessTokens()
                 } finally {
-                    // 🔓 解锁（无论成功失败）
                     taskStartingLock.value[TASK_ID] = false
                 }
             },
-            interval: validatedInterval.value * 60 * 1000,
             immediate: true,
             maxRetry: 3,
             onError: async (error) => {
-                // 🔓 确保错误时也解锁（双重保险）
                 taskStartingLock.value[TASK_ID] = false
-
                 const batchId = generateBatchId()
                 logBatches.value.push({
                     batchId,
@@ -248,7 +210,24 @@ export function useTaskManager(options) {
                 message.error(`${options.taskName}任务执行失败：${error.message}`)
                 taskStatus.value = 'error'
             }
-        })
+        }
+
+        // 根据调度类型注入不同参数
+        if (scheduleType === 'cron') {
+            if (!cronExpression) {
+                message.error('Cron 模式必须提供 cronExpression')
+                taskStartingLock.value[TASK_ID] = false
+                return
+            }
+            taskConfig.scheduleType = 'cron'
+            taskConfig.cronExpression = cronExpression
+        } else {
+            // 默认 interval 模式
+            taskConfig.scheduleType = 'interval'
+            taskConfig.interval = validatedInterval.value * 60 * 1000
+        }
+
+        const success = timedTaskManager.createTask(taskConfig)
 
         if (success) {
             taskStatus.value = 'running'
@@ -257,20 +236,16 @@ export function useTaskManager(options) {
                 batchId,
                 timestamp: new Date().toLocaleString(),
                 type: 'system',
-                mainMessage: `[${new Date().toLocaleString()}] ${options.taskName}任务已启动（间隔：${validatedInterval.value} 分钟）`,
+                mainMessage: `[${new Date().toLocaleString()}] ${options.taskName}任务已启动（模式：${scheduleType}${scheduleType === 'cron' ? `, cron: ${cronExpression}` : `, 间隔：${validatedInterval.value} 分钟`})`,
                 tokenDetails: []
             })
-            message.success(`${options.taskName}任务已启动（间隔：${validatedInterval.value} 分钟）`)
+            message.success(`${options.taskName}任务已启动（模式：${scheduleType}${scheduleType === 'cron' ? `, cron: ${cronExpression}` : `, 间隔：${validatedInterval.value} 分钟`})`)
         } else {
-            // 🔓 创建失败也要解锁
             taskStartingLock.value[TASK_ID] = false
-            message.error(`${options.taskName}任务启动失败，请检查任务配置`)
+            message.error(`${options.taskName}任务启动失败`)
         }
     }
 
-    /**
-     * 暂停任务
-     */
     const pauseTask = () => {
         const success = timedTaskManager.pauseTask(TASK_ID)
         if (success) {
@@ -286,13 +261,10 @@ export function useTaskManager(options) {
             })
             message.success(`${options.taskName}任务已暂停`)
         } else {
-            message.error(`${options.taskName}任务暂停失败，任务可能未运行`)
+            message.error(`${options.taskName}任务暂停失败`)
         }
     }
 
-    /**
-     * 恢复任务
-     */
     const resumeTask = () => {
         const success = timedTaskManager.resumeTask(TASK_ID)
         if (success) {
@@ -308,32 +280,26 @@ export function useTaskManager(options) {
             })
             message.success(`${options.taskName}任务已恢复执行`)
         } else {
-            message.error(`${options.taskName}任务恢复失败，请检查任务状态`)
+            message.error(`${options.taskName}任务恢复失败`)
         }
     }
 
-    /**
-     * 重启任务
-     */
     const restartTask = (fixTimeTask = false) => {
-        // 验证间隔（允许重启时更新间隔）
-        validateInterval(fixTimeTask)
+        if (scheduleType === 'interval') {
+            validateInterval(fixTimeTask)
+        }
 
-        // 暂停原有任务
         timedTaskManager.pauseTask(TASK_ID)
 
-        // 🔒 防重入
         if (taskStartingLock.value[TASK_ID]) {
-            message.warning(`${options.taskName}任务正在启动中，请稍后再试`)
+            message.warning(`${options.taskName}任务正在启动中`)
             return
         }
 
-        // 🔒 加锁
         taskStartingLock.value[TASK_ID] = true
 
-        // 重启任务（更新间隔）
-        const success = timedTaskManager.restartTask(TASK_ID, {
-            interval: validatedInterval.value * 60 * 1000,
+        // 构建重启参数
+        const restartConfig = {
             fn: async () => {
                 try {
                     await batchProcessTokens()
@@ -341,11 +307,21 @@ export function useTaskManager(options) {
                     taskStartingLock.value[TASK_ID] = false
                 }
             }
-        })
+        }
+
+        if (scheduleType === 'cron') {
+            restartConfig.scheduleType = 'cron'
+            restartConfig.cronExpression = cronExpression
+        } else {
+            restartConfig.scheduleType = 'interval'
+            restartConfig.interval = validatedInterval.value * 60 * 1000
+        }
+
+        const success = timedTaskManager.restartTask(TASK_ID, restartConfig)
 
         if (success) {
             taskStatus.value = 'running'
-            executeCount.value = 0 // 重置计数
+            executeCount.value = 0
             lastExecuteTime.value = ''
             calculateNextExecuteTime()
             const batchId = generateBatchId()
@@ -353,28 +329,21 @@ export function useTaskManager(options) {
                 batchId,
                 timestamp: new Date().toLocaleString(),
                 type: 'system',
-                mainMessage: `[${new Date().toLocaleString()}] ${options.taskName}任务已重启（间隔：${validatedInterval.value} 分钟），执行计数已重置`,
+                mainMessage: `[${new Date().toLocaleString()}] ${options.taskName}任务已重启（模式：${scheduleType}${scheduleType === 'cron' ? `, cron: ${cronExpression}` : `, 间隔：${validatedInterval.value} 分钟`})，执行计数已重置`,
                 tokenDetails: []
             })
-            message.success(`${options.taskName}任务已重启（间隔：${validatedInterval.value} 分钟），执行计数已重置`)
+            message.success(`${options.taskName}任务已重启（模式：${scheduleType}${scheduleType === 'cron' ? `, cron: ${cronExpression}` : `, 间隔：${validatedInterval.value} 分钟`})，执行计数已重置`)
         } else {
-            // 🔓 失败解锁
             taskStartingLock.value[TASK_ID] = false
-            message.error(`${options.taskName}任务重启失败，请重试`)
+            message.error(`${options.taskName}任务重启失败`)
         }
     }
 
-    /**
-     * 清空日志
-     */
     const clearLogs = () => {
         logBatches.value = []
         message.success(`${options.taskName}任务日志已清空`)
     }
 
-    /**
-     * 切换日志批次展开状态
-     */
     const toggleBatchExpand = (batchId) => {
         if (expandedBatchIds.value.has(batchId)) {
             expandedBatchIds.value.delete(batchId)
@@ -383,32 +352,23 @@ export function useTaskManager(options) {
         }
     }
 
-    // ========== 公共倒计时逻辑 ==========
-    /**
-     * 更新倒计时
-     */
+    // ========== 倒计时逻辑（适配 cron）==========
     const updateCountdown = (nextTimeStr, nextTime) => {
         const now = Date.now()
         const diff = nextTime.getTime() - now
-
         if (diff <= 0) {
             nextExecuteTime.value = nextTimeStr
             countdownText.value = '00:00:00'
             return
         }
-
         const hours = Math.floor(diff / (1000 * 60 * 60)).toString().padStart(2, '0')
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)).toString().padStart(2, '0')
         const seconds = Math.floor((diff % (1000 * 60)) / 1000).toString().padStart(2, '0')
         countdownText.value = `${hours}:${minutes}:${seconds}`
         nextExecuteTime.value = nextTimeStr
-
         countdownFrame = requestAnimationFrame(() => updateCountdown(nextTimeStr, nextTime))
     }
 
-    /**
-     * 计算下次执行时间
-     */
     const calculateNextExecuteTime = () => {
         if (taskStatus.value !== 'running') {
             nextExecuteTime.value = '任务未运行/已暂停'
@@ -420,46 +380,38 @@ export function useTaskManager(options) {
             return
         }
 
-        const lastExecTime = lastExecuteTime.value ? new Date(lastExecuteTime.value) : new Date()
-        const intervalMs = validatedInterval.value * 60 * 1000
-        const nextTime = new Date(lastExecTime.getTime() + intervalMs)
-        const nextTimeStr = nextTime.toLocaleString()
+        // 如果是 cron 模式且在 Web 环境，尝试获取下次执行时间
+        if (scheduleType === 'cron' && !timedTaskManager.env.supportSchedule) {
+            const nextTime = timedTaskManager.getNextFireTime(TASK_ID)
+            if (nextTime) {
+                updateCountdown(nextTime.toLocaleString(), nextTime)
+                return
+            }
+        }
 
-        updateCountdown(nextTimeStr, nextTime)
+        // 否则回退到 interval 模式计算
+        const lastExecTime = lastExecuteTime.value ? new Date(lastExecuteTime.value) : new Date()
+        const intervalMs = (scheduleType === 'interval' ? validatedInterval.value : DEFAULT_INTERVAL_MINUTES) * 60 * 1000
+        const nextTime = new Date(lastExecTime.getTime() + intervalMs)
+        updateCountdown(nextTime.toLocaleString(), nextTime)
     }
 
-    // ========== 任务状态格式化 ==========
+    // ========== 状态计算（不变）==========
     const taskStatusStyle = computed(() => {
-        const statusMap = {
-            running: 'success',
-            paused: 'warning',
-            error: 'error',
-            idle: 'default'
-        }
+        const statusMap = { running: 'success', paused: 'warning', error: 'error', idle: 'default' }
         return statusMap[taskStatus.value]
     })
 
     const taskStatusText = computed(() => {
-        const statusMap = {
-            running: '运行中',
-            paused: '已暂停',
-            error: '执行失败',
-            idle: '未运行'
-        }
+        const statusMap = { running: '运行中', paused: '已暂停', error: '执行失败', idle: '未运行' }
         return statusMap[taskStatus.value]
     })
 
-    // ========== 组件卸载清理 ==========
+    // ========== 卸载清理（不变）==========
     onUnmounted(() => {
-        // 清理倒计时
-        if (countdownFrame) {
-            cancelAnimationFrame(countdownFrame)
-        }
-        // 暂停任务
+        if (countdownFrame) cancelAnimationFrame(countdownFrame)
         timedTaskManager.pauseTask(TASK_ID)
-        // 🔓 确保卸载时释放锁（安全兜底）
         delete taskStartingLock.value[TASK_ID]
-        // 记录日志
         const batchId = generateBatchId()
         logBatches.value.push({
             batchId,
@@ -471,10 +423,12 @@ export function useTaskManager(options) {
         message.info(`${options.taskName}任务组件已卸载，相关资源已清理`)
     })
 
-    // ========== 返回公共能力 ==========
+    // ========== 返回（暴露 scheduleType 供 UI 使用）==========
     return {
         // 配置
         intervalMinutes,
+        scheduleType, // 新增：暴露调度类型
+        cronExpression, // 新增：暴露 cron 表达式
         DEFAULT_INTERVAL_MINUTES,
         // 状态
         taskStatus,
