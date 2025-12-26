@@ -130,7 +130,11 @@ let reconInterval = 60000 * 100     //100分钟
 // ===== 自动重连开关（持久化到 localStorage）=====
 const autoReconnectEnabled = ref(localStorage.getItem('autoReconnectEnabled') !== 'false')
 
-// 统一调用 TimedTaskManager（无需判断环境）
+/**
+ *  统一调用 TimedTaskManager（无需判断环境）
+ * 01:30, 02:30, 08:30, 11:30, 14:30, 17:30, 21:30, 22:30
+ * 各执行一次全局账号链接任务。
+ */
 const registerAutoReconnectTask = () => {
   timedTaskManager.createTask({
     id: reconnectTaskId,
