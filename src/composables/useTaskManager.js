@@ -4,6 +4,7 @@ import { timedTaskManager } from '@/utils/timedTaskManager'
 import { useMessage } from 'naive-ui'
 import LogUtil from "@/utils/LogUtil.js";
 import { ensureWebSocketConnected } from "@/utils/CommonUtil.js";
+import {createSharedLogger} from "@/utils/sharedLogger.js";
 
 // 公共常量
 const CONNECT_TIMEOUT = 15000
@@ -80,11 +81,13 @@ export function useTaskManager(options) {
     // ========== Token 重试 & 批处理（不变）==========
     const processTokenWithRetry = async (token, retryCount = 0) => {
         let allMessages = []
+        const createLog = createSharedLogger(token.name, allMessages);
         try {
             const connectResult = await ensureWebSocketConnected(token)
             allMessages = [...allMessages, ...connectResult.messages]
             if (!connectResult.success) {
                 if (connectResult.needTry) {
+                    createLog(`${options.taskName} 连接失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}`, 'error')
                     throw new Error(`Token ${token.name} 连接失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}）`)
                 } else {
                     return { success: false, allMessages }
@@ -95,16 +98,17 @@ export function useTaskManager(options) {
             if (businessResult.success) {
                 return { success: true, allMessages }
             } else {
+                createLog(`${options.taskName} 业务执行失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}）`, 'error')
                 throw new Error(`Token ${token.name} ${options.taskName} 业务执行失败，触发重试（${retryCount + 1}/${MAX_RETRY_TIMES}）`)
             }
         } catch (error) {
-            allMessages.push(`[${token.name}] 错误：${error.message}`)
+            createLog(`错误：${error.message}`)
             if (retryCount < MAX_RETRY_TIMES) {
-                allMessages.push(`[${token.name}] 将在 ${RETRY_INTERVAL_MS / 60000} 分钟后进行第 ${retryCount + 1} 次重试...`)
+                createLog(`将在 ${RETRY_INTERVAL_MS / 60000} 分钟后进行第 ${retryCount + 1} 次重试...`)
                 await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL_MS))
                 return await processTokenWithRetry(token, retryCount + 1)
             } else {
-                allMessages.push(`[${token.name}] 已达最大重试次数（${MAX_RETRY_TIMES}次），${options.taskName} 任务最终失败`)
+                createLog(`已达最大重试次数（${MAX_RETRY_TIMES}次），${options.taskName} 任务最终失败`, 'error')
                 return { success: false, allMessages }
             }
         }
