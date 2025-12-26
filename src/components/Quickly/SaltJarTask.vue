@@ -227,7 +227,7 @@ const {
 } = useTaskManager({
   taskKey: 'saltjar', // 唯一标识
   scheduleType: 'cron',
-  cronExpression: '23 2,8,14,21 * * *',
+  cronExpression: '37 2,8,14,21 * * *',
   taskName: '盐罐机器人管理', // 任务名称
   immediate: true,
   executeBusiness: executeSaltJarBusiness // 差异化业务逻辑

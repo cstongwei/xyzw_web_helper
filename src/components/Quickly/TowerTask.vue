@@ -511,7 +511,7 @@ const {
   taskKey: 'tower',
   taskName: '塔防任务',
   scheduleType: 'cron',
-  cronExpression: '47 2,8,14,21 * * *',
+  cronExpression: '43 2,8,14,21 * * *',
   immediate: false,
   executeBusiness: executeSingleTokenBusiness,
 })

@@ -142,9 +142,10 @@ const registerAutoReconnectTask = () => {
         LogUtil.info('自动重连已关闭，跳过本次任务')
       }
     },
-    interval: reconInterval,
-    immediate: false, // 按需设置是否立即执行
-    maxRetry: 0, // 重试次数
+    scheduleType: 'cron',
+    cronExpression: '30 1,2,8,11,14,17,21,22 * * *',
+    immediate: false,
+    maxRetry: 0,
     onError: (error) => {
       LogUtil.error(`重连任务执行失败:`, error)
       message.error('自动重连任务执行失败，请查看日志')

@@ -553,7 +553,7 @@ const {
   taskKey: 'daily-timed-task',
   taskName: '每日任务',
   scheduleType: 'cron',
-  cronExpression: '11 1,11,17,22 * * *',
+  cronExpression: '37 1,11,17,22 * * *',
   immediate: true,
   executeBusiness: executeDailyBusiness,
   getNextExecuteTime: getNextDailyExecuteTime
