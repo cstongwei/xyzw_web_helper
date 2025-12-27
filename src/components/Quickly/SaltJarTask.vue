@@ -170,8 +170,7 @@ const executeSaltJarBusiness = async (token) => {
     await ensureWebSocketConnected(token)
     // 暂停盐罐机器人
     createLog('发送暂停盐罐机器人指令', 'info')
-
-    const stopBottleSuccess = sendGameCommand(token.id, token.name,'bottlehelper_pause')
+    const stopBottleSuccess = sendGameCommand(token.id, token.name,'bottlehelper_stop')
     if (!stopBottleSuccess) {
       throw new Error(`${token.name} 暂停盐罐机器人指令发送失败`)
     }
