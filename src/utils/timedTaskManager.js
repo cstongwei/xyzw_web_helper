@@ -26,7 +26,6 @@ class TimedTaskManager {
             cronParserLoadPromise = import('cron-parser').then(mod => {
                 console.log('【导入成功】cron-parser mod 结构:', mod);
                 // 核心修改：兼容 mod 和 mod.default 两种导出结构
-                debugger
                 let parseExpression = mod.parse;
                 // 若 mod 上没有，尝试从 mod.default 上获取
                 if (!parseExpression && mod.default) {
@@ -195,6 +194,7 @@ class TimedTaskManager {
             const interval = cronParser.parseExpression(task.cronExpression, { currentDate: new Date() });
             const next = interval.next();
             task.nextFireTime = next.toDate();
+            debugger
             const delay = task.nextFireTime.getTime() - Date.now();
 
             if (delay > 0) {
