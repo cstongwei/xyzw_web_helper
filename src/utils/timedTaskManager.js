@@ -194,7 +194,6 @@ class TimedTaskManager {
             const interval = cronParser.parseExpression(task.cronExpression, { currentDate: new Date() });
             const next = interval.next();
             task.nextFireTime = next.toDate();
-            debugger
             const delay = task.nextFireTime.getTime() - Date.now();
 
             if (delay > 0) {
