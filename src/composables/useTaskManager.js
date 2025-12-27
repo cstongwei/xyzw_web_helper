@@ -144,18 +144,22 @@ export function useTaskManager(options) {
         }
         logBatches.value.push(batchRecord)
         message.info(batchRecord.mainMessage)
-
+        let index = 0
         for (const token of tokens) {
+            index = index+1
             const tokenDetail = {
-                tokenName: token.name || '未知Token',
+                tokenName:"["+index+"] "+ (token.name || '未知Token'),
                 tokenId: token.id || '未知ID',
                 status: 'success',
+                index : index,
                 messages: []
             }
             const result = await processTokenWithRetry(token, 0)
             tokenDetail.messages = result.allMessages
             tokenDetail.status = result.success ? 'success' : 'error'
             batchRecord.tokenDetails.push(tokenDetail)
+
+            await new Promise(res => setTimeout(res, 500));
         }
 
         batchRecord.type = batchRecord.tokenDetails.some(t => t.status === 'error') ? 'error' : 'success'

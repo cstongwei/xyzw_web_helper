@@ -233,7 +233,7 @@ const CLIMB_TIMEOUT = 5*60000 // 爬塔超时时间（ms）
 // 弹窗控制
 const isSettingModalOpen = ref(false)
 const isLogModalOpen = ref(false)
-
+const isSerialProcessing = ref(false);
 // Token存储
 const tokenStore = useTokenStore()
 
@@ -545,8 +545,27 @@ const validateIntervalWrapper = () => {
 const startTask = () => {
   // 先验证间隔
   validateIntervalWrapper()
-  // 启动任务
-  startTowerTask()
+  if (isSerialProcessing.value || taskStatus.value === 'running') {
+    window.$message?.warning('当前正在执行塔防任务，请勿重复启动');
+    return;
+  }
+
+  // 3. 包装任务执行，标记串行状态
+  isSerialProcessing.value = true;
+  const wrapTask = async () => {
+    try {
+      await startTowerTask(); // 原有启动逻辑
+    } catch (error) {
+      console.error('塔防任务启动异常:', error);
+      window.$message?.error('任务启动失败');
+    } finally {
+      // 任务结束（无论成功/失败/暂停），重置串行标记
+      // 若 taskStatus 是 paused，也需重置，允许后续恢复/重启
+      isSerialProcessing.value = false;
+    }
+  };
+
+  wrapTask();
 }
 
 /**
