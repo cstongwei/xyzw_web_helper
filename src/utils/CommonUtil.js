@@ -297,4 +297,7 @@ export const refreshRoleInfo = async (tokenId,tokenName, onSyncComplete = null) 
         LogUtil.info(`获取角色${tokenName}信息失败: ${error.message}`);
         throw error;
     }
+
 };
+
+export const delaySeconds = (seconds) => new Promise(resolve => setTimeout(resolve, seconds*1000));
