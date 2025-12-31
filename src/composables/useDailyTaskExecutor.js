@@ -9,7 +9,7 @@ import {
     refreshRoleInfo,
     hasCompeteToday,
     markCompeteToday,
-    isBetweenTime, isTodayInWeekdays, ensureWebSocketConnected
+    isBetweenTime, isTodayInWeekdays, ensureWebSocketConnected, LocalStorageUtil
 } from '@/utils/CommonUtil.js';
 import {createSharedLogger} from "@/utils/sharedLogger.js";
 // 每日任务列表
@@ -602,18 +602,32 @@ export default function useDailyTaskExecutor() {
     // 执行单个账号的每日任务（供DailyTask.vue使用）
     const executeDailyBusiness = async (token) => {
         const key = `daily-TASK:${token.id}`
-        const taskRun = localStorage.getItem(key)
-        if (taskRun){
-            const messages = []
-            messages.push('任务已经启动，不重复执行')
-            return { success: false,messages }
+        const taskRun = LocalStorageUtil.get( key)
+        const now = new Date();
+        const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2小时对应的毫秒数
+
+        if (taskRun) {
+            const storedTime = new Date(taskRun);
+            if (!isNaN(storedTime.getTime())) {
+                const diffMs = now - storedTime;
+                if (diffMs <= TWO_HOURS_MS) {
+                    // 2小时内，视为任务正在运行或刚完成，不重复执行
+                    const messages = [];
+                    messages.push('任务已经启动，不重复执行');
+                    return { success: false, messages };
+                }
+                LogUtil.warn(`[${token.id}] 检测到任务运行超过2小时，允许重新执行`);
+            } else {
+                LogUtil.warn(`[${token.id}] 存储的时间无效，允许重新执行`);
+            }
         }
-        localStorage.setItem(key, new Date().toISOString())
+        LocalStorageUtil.set(key, new Date().toISOString())
 
         const messages = []
         const createLogFn = createSharedLogger(token.name, messages);
         const result = await ensureWebSocketConnected(token);
         if (!result.success) {
+            LocalStorageUtil.delete(key)
             return result;
         }
 
