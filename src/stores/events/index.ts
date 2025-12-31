@@ -72,6 +72,7 @@ onSome(['role_getroleinforesp', 'role_getroleinfo'], (data: Session) => {
   const { body } = data;
   data.gameData.value.roleInfo = body;
   data.gameData.value.lastUpdated = new Date().toISOString()
+  $emit.emit('reflushRoleInfo', data);
   if (body.role?.study?.maxCorrectNum !== undefined) {
     $emit.emit('I-study', data);
   }
@@ -143,6 +144,7 @@ onSome(['tower_getinfo', 'tower_getinforesp'], (data: Session) => {
   if (!gameData.value.towerResult) {
     gameData.value.towerResult = {}
   }
+  $emit.emit('reflushTowerInfo', data);
   if (!body) {
     gameLogger.warn('爬塔战斗开始响应为空');
     return;
@@ -177,7 +179,7 @@ onSome(['fight_starttower', 'fight_starttowerresp'], (data: Session) => {
     timestamp: Date.now()
   }
   gameData.value.lastUpdated = new Date().toISOString()
-
+  $emit.emit('reflushFightTowerInfo', {...gameData.value.towerResult,tokenId:data.tokenId,client});
   // 检查是否需要自动领取奖励
   if (!isSuccess && towerId == undefined) {
     return;

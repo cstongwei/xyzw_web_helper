@@ -4,13 +4,9 @@ import LogUtil from "@/utils/LogUtil.js";
 
 // 仅在非 Electron 环境（即 Web）中动态导入 cron-parser
 let cronParser = null;
-if (typeof window !== 'undefined' && !getAppEnvironment().isDesktop) {
-    import('cron-parser').then(mod => {
-        cronParser = mod.default || mod;
-    }).catch(err => {
-        console.error('[TimedTaskManager] 加载 cron-parser 失败:', err);
-    });
-}
+let cronParserLoaded = false;
+let cronParserLoadPromise = null;
+
 
 class TimedTaskManager {
     constructor() {
@@ -22,8 +18,39 @@ class TimedTaskManager {
             STOPPED: 'stopped'
         };
         this.electronTaskHandlers = new Map();
+        this._initCronParser();
     }
 
+    _initCronParser(){
+        if (typeof window !== 'undefined' && !getAppEnvironment().isDesktop) {
+            cronParserLoadPromise = import('cron-parser').then(mod => {
+                console.log('【导入成功】cron-parser mod 结构:', mod);
+                // 核心修改：兼容 mod 和 mod.default 两种导出结构
+                let parseExpression = mod.parse;
+                // 若 mod 上没有，尝试从 mod.default 上获取
+                if (!parseExpression && mod.default) {
+                    parseExpression = mod.default.parse;
+                }
+                // 双重校验：确保获取到有效方法
+                if (!parseExpression || typeof parseExpression !== 'function') {
+                    throw new Error('cron-parser 导出结构异常，未找到有效的 parseExpression 方法');
+                }
+                cronParser = { parseExpression };
+                cronParserLoaded = true;
+                console.log('[TimedTaskManager] 加载 cron-parser 成功');
+                return cronParser;
+            }).catch(err => {
+                cronParserLoaded = false;
+                console.error('[TimedTaskManager] 加载 cron-parser 失败:', err);
+                throw err;
+            });
+        }else{
+            console.log('[TimedTaskManager] 非web环境不加载 cron-parser');
+            cronParser = null;
+            cronParserLoaded = true;
+            cronParserLoadPromise = Promise.resolve(null);
+        }
+    }
     /**
      * 创建任务
      * @param {Object} options
@@ -85,7 +112,10 @@ class TimedTaskManager {
         } else {
             // Web：区分调度类型
             if (scheduleType === 'cron') {
-                this._createWebCronTask(task);
+                // 异步调用 _createWebCronTask
+                this._createWebCronTask(task).catch(err => {
+                    LogUtil.error(`[TimedTaskManager] 任务 ${id} 创建失败`, err);
+                });
             } else {
                 this._createWebIntervalTask(task);
             }
@@ -131,22 +161,29 @@ class TimedTaskManager {
         }
     }
 
-    _createWebCronTask(task) {
-        if (!cronParser) {
-            console.error('[TimedTaskManager] cron-parser 未加载，无法创建 cron 任务');
+    async _createWebCronTask(task) {
+        try {
+            await cronParserLoadPromise;
+            if (!cronParser || !cronParser.parseExpression) {
+                console.error('[TimedTaskManager] cron-parser 未加载或加载异常，无法创建 cron 任务');
+                if (typeof task.onError === 'function') {
+                    task.onError(new Error('缺少 cron-parser 依赖或依赖加载失败'), task);
+                }
+                this.deleteTask(task.id);
+                return;
+            }
+
+            this._scheduleNextCronExecution(task);
+
+            if (task.immediate) {
+                await this._executeTask(task);
+            }
+        } catch (err) {
+            console.error('[TimedTaskManager] 创建 cron 任务失败:', err);
             if (typeof task.onError === 'function') {
-                task.onError(new Error('缺少 cron-parser 依赖'), task);
+                task.onError(err, task);
             }
             this.deleteTask(task.id);
-            return;
-        }
-
-        // 立即安排下一次执行
-        this._scheduleNextCronExecution(task);
-
-        // 如果 immediate 为 true，则额外立即执行一次（不干扰 cron 计划）
-        if (task.immediate) {
-            this._executeTask(task);
         }
     }
 
