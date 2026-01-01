@@ -429,7 +429,7 @@ onSome(['reflushFightTowerInfo'], async (data) => {
     triggerNextClimb(data.tokenId, nextClimbCount, energy)
   }else{
     triggerNextClimb(data.tokenId, nextClimbCount, energy)
-  } 
+  }
 });
 
 // ========== 爬塔核心方法 ==========
@@ -440,6 +440,7 @@ onSome(['reflushFightTowerInfo'], async (data) => {
  * @param messages 日志消息数组
  * @param originalFormation 原始阵容
  * @param targetFormation 目标阵容
+ * @param climbCompleteCallback 回调函数
  */
 const initClimbContext = (token, logFn, messages, originalFormation, targetFormation,climbCompleteCallback) => {
   // 清除原有状态
