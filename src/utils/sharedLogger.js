@@ -35,14 +35,34 @@ export const createSharedLogger = (tokenName, messages) => {
         throw new Error('messages must be an array');
     }
 
-    return (actionMsg, type = 'info') => {
-        // UI 展示用美化格式（带图标、简洁时间）
-        const uiMessage = formatUIMessage(tokenName, actionMsg, type);
-        messages.push(uiMessage);
+    /**
+     * 日志写入函数（新增target参数）
+     * @param {string} actionMsg - 日志内容
+     * @param {string} [type='info'] - 日志类型（success/error/warning/info）
+     * @param {string} [target='both'] - 输出目标：ui（仅UI）/ file（仅文件）/ both（默认，两者都输出）
+     */
+    return (actionMsg, type = 'info', target = 'both') => {
+        if (!actionMsg || actionMsg.trim() === '') {
+            return;
+        }
 
-        // 文件日志用标准格式（无 emoji，带 token 和完整时间）
-        const fileLog = formatFileLog(tokenName, actionMsg, type);
+        // 1. 校验目标参数，兜底默认值
+        const validTargets = ['ui', 'file', 'both'];
+        const finalTarget = validTargets.includes(target) ? target : 'both';
+
+        // 2. 格式化两种日志（保留你原有逻辑）
         const logMethod = LogUtil[type] || LogUtil.info || console.log;
-        logMethod(fileLog);
+        // 3. 根据目标参数判断输出逻辑
+        // 输出到UI（messages数组）
+        if (finalTarget === 'ui' || finalTarget === 'both') {
+            const uiMessage = formatUIMessage(tokenName, actionMsg, type);
+            messages.push(uiMessage);
+        }
+
+        // 输出到文件（LogUtil）
+        if (finalTarget === 'file' || finalTarget === 'both') {
+            const fileLog = formatFileLog(tokenName, actionMsg, type);
+            logMethod(fileLog);
+        }
     };
 };

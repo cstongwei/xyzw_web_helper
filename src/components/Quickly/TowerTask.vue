@@ -266,7 +266,37 @@ const climbContextMap = new Map([
   }
   */
 ]);
+// ========== 显性爬塔驱动函数（替代setTimeout） ==========
+/**
+ * 显性触发下一次爬塔（无隐式任务排队，可被await阻塞）
+ * @param {string} tokenId - TokenID
+ * @param {number} nextClimbCount - 下一次爬塔次数
+ * @param {number} currentEnergy - 当前体力值
+ */
+const triggerNextClimb = (tokenId, nextClimbCount, currentEnergy) => {
+  const climbContext = climbContextMap.get(tokenId);
+  // 严格状态校验（核心：拦截领奖等待/已停止/体力不足等非法状态）
+  if (
+      !climbContext ||
+      !climbContext.isClimbing ||
+      climbContext.isStopped ||
+      climbContext.isWaitingForReward || // 领奖期间直接拦截
+      currentEnergy <= 0 ||
+      nextClimbCount > climbContext.maxClimbTimes
+  ) {
+    climbContext?.logFn(`当前状态不允许发送第${nextClimbCount}次爬塔指令，取消发送`, 'info');
+    return;
+  }
 
+  const { logFn, token } = climbContext;
+  // 显性发送爬塔指令（无定时器，直接执行）
+  logFn(`第${nextClimbCount}次爬塔：体力剩余${currentEnergy}，发送fight_starttower指令`, 'success');
+  executeGameCommand(tokenId, token.name, 'fight_starttower', {}, '爬塔', 10000)
+      .catch(err => {
+        logFn(`[显性驱动] 第${nextClimbCount}次爬塔指令发送失败：${err.message}`, 'error');
+        stopClimb(tokenId, '指令发送失败');
+      });
+};
 // ========== 事件监听：核心事件驱动逻辑 ==========
 /**
  * role_getroleinfo 指令的响应监听：触发第一次爬塔指令
@@ -298,10 +328,10 @@ onSome(['reflushRoleInfo'], (data) => {
   }
 
   // 4. 发送第一次爬塔指令
-  logFn(`首次爬塔：体力剩余${energy}，发送fight_starttower指令`, 'success');
+  logFn(`爬塔：体力剩余${energy}，发送fight_starttower指令`, 'success');
   executeGameCommand(data.tokenId, token.name, 'fight_starttower', {}, '爬塔', 10000)
       .catch(err => {
-        logFn(`首次爬塔指令发送失败：${err.message}`, 'error');
+        logFn(`爬塔指令发送失败：${err.message}`, 'error');
         stopClimb(data.tokenId, '指令发送失败');
       });
 });
@@ -310,10 +340,15 @@ onSome(['reflushRoleInfo'], (data) => {
  * fight_starttower 指令的响应监听：循环判断体力，继续爬塔
  */
 onSome(['reflushFightTowerInfo'], async (data) => {
+  if (!data || !data.tokenId){
+    return;
+  }
   const climbContext = climbContextMap.get(data.tokenId);
-
+  if (!climbContext || !climbContext.isClimbing || climbContext.isStopped) {
+    return;
+  }
   const {logFn, token} = climbContext;
-  logFn(`收到爬塔结果数据:${JSON.stringify(data)}`, 'info');
+  logFn(`收到爬塔结果数据:${JSON.stringify(data)}`, 'info','file');
   if (!data || !data.tokenId) return;
 
   // 1. 缓存战斗结果
@@ -325,7 +360,7 @@ onSome(['reflushFightTowerInfo'], async (data) => {
   });
 
   const {isSuccess, towerId} = data
-  if (!isSuccess && towerId == undefined) {
+  if (!isSuccess && towerId === undefined) {
     return;
   }
 
@@ -334,20 +369,19 @@ onSome(['reflushFightTowerInfo'], async (data) => {
   logFn(`当前正在爬:${rewardFloor}-${layer + 1}层塔`, 'info');
   // 如果是新层数的第一层(layer=0)，检查是否有奖励可领取
   if (layer === 0) {
+    // 锁定领奖等待状态（核心：立即标记为true，拦截后续指令）
     const roleInfo = tokenTowerCache.get(data.tokenId).roleInfo
     const towerRewards = roleInfo?.tower?.reward
     const {client} = data;
-    debugger
+    logFn(`检测到有奖励 ${JSON.stringify(towerRewards)}`, 'info');
     if (towerRewards && !towerRewards[rewardFloor]) {
+      climbContext.isWaitingForReward = true;
       // 保存奖励信息
       tokenTowerCache.get(data.tokenId).towerFightResult.autoReward = true
       tokenTowerCache.get(data.tokenId).towerFightResult.rewardFloor = rewardFloor
-      logFn(`检测到有奖励 ${JSON.stringify(towerRewards)}`, 'info');
+      logFn(`发送领取奖励指令`, 'info')
+      client?.send('tower_claimreward', {rewardId: rewardFloor})
     }
-    logFn(`发送领取奖励指令`, 'info')
-    client?.send('tower_claimreward', {rewardId: rewardFloor})
-    logFn(`等待3秒，等待领取奖励`, 'info');
-    await delaySeconds(3);
   }
   // 2. 校验爬塔状态：非爬塔中/已停止，直接返回
   if (!climbContext || !climbContext.isClimbing || climbContext.isStopped) return;
@@ -383,18 +417,19 @@ onSome(['reflushFightTowerInfo'], async (data) => {
 
   // 5. 满足继续爬塔条件，延迟发送下一次指令
   logFn(`满足继续爬塔条件，${CLIMB_INTERVAL / 1000}秒后发送下一次爬塔指令`, 'info');
-  setTimeout(() => {
-    // 再次校验状态（避免延迟期间状态变更）
-    const latestStatus = climbContextMap.get(data.tokenId);
-    if (!latestStatus || !latestStatus.isClimbing || latestStatus.isStopped) return;
-
-    logFn(`第${climbCount + 1}次爬塔：体力剩余${energy}，发送fight_starttower指令`, 'success');
-    executeGameCommand(data.tokenId, token.name, 'fight_starttower', {}, '爬塔', 10000)
-        .catch(err => {
-          logFn(`第${climbCount + 1}次爬塔指令发送失败：${err.message}`, 'error');
-          stopClimb(data.tokenId, '指令发送失败');
-        });
-  }, CLIMB_INTERVAL);
+  // 显性异步延迟（替代setTimeout，可被领奖的10秒await阻塞）
+  await delaySeconds(CLIMB_INTERVAL / 1000);
+  const nextClimbCount = climbCount + 1;
+  // 显性调用爬塔函数（无隐式任务，状态实时校验）
+  if(climbContext.isWaitingForReward){
+    logFn(`即将等待5秒，确保领奖完成，climbContext存在性：${!!climbContext}，爬塔状态：${climbContext?.isClimbing ? '运行中' : '已停止'}，是否强制停止：${climbContext?.isStopped ? '是' : '否'}`, 'info');
+    await delaySeconds(5);
+    climbContext.isWaitingForReward = false;
+    logFn(`5秒等待结束，当前climbContext：${JSON.stringify(!!climbContext)}`, 'info');
+    triggerNextClimb(data.tokenId, nextClimbCount, energy)
+  }else{
+    triggerNextClimb(data.tokenId, nextClimbCount, energy)
+  } 
 });
 
 // ========== 爬塔核心方法 ==========
@@ -406,7 +441,7 @@ onSome(['reflushFightTowerInfo'], async (data) => {
  * @param originalFormation 原始阵容
  * @param targetFormation 目标阵容
  */
-const initClimbContext = (token, logFn, messages, originalFormation, targetFormation) => {
+const initClimbContext = (token, logFn, messages, originalFormation, targetFormation,climbCompleteCallback) => {
   // 清除原有状态
   if (climbContextMap.has(token.id)) {
     const oldStatus = climbContextMap.get(token.id);
@@ -423,6 +458,7 @@ const initClimbContext = (token, logFn, messages, originalFormation, targetForma
   climbContextMap.set(token.id, {
     isClimbing: true,
     isStopped: false,
+    isWaitingForReward: false, // 领奖等待标记，默认false
     climbCount: 0,
     maxClimbTimes: MAX_CLIMB_TIMES,
     timeoutTimer,
@@ -430,7 +466,8 @@ const initClimbContext = (token, logFn, messages, originalFormation, targetForma
     targetFormation,
     token,
     logFn,
-    messages
+    messages,
+    climbCompleteCallback
   });
 };
 
@@ -446,8 +483,8 @@ const stopClimb = async (tokenId, reason = '未知原因') => {
   // 1. 更新状态
   climbContext.isClimbing = false;
   climbContext.isStopped = true;
-  const { logFn, token, originalFormation, targetFormation, climbCount, messages, timeoutTimer } = climbContext;
-
+  const { logFn, token, originalFormation, targetFormation, climbCount, messages, timeoutTimer,climbCompleteCallback } = climbContext;
+  climbContext.isWaitingForReward = false;
   // 2. 清除超时定时器
   if (timeoutTimer) clearTimeout(timeoutTimer);
 
@@ -461,6 +498,9 @@ const stopClimb = async (tokenId, reason = '未知原因') => {
 
   // 4. 日志记录
   logFn(`爬塔流程结束，共执行${climbCount}次，停止原因：${reason}`, 'success');
+  if (typeof climbCompleteCallback === 'function') {
+    climbCompleteCallback();
+  }
 
   return { success: true, messages };
 };
@@ -468,9 +508,9 @@ const stopClimb = async (tokenId, reason = '未知原因') => {
 /**
  * 执行爬塔（事件驱动版，替代原有for循环）
  */
-const executeTowerBattle = async (token, logFn, messages, originalFormation, targetFormation) => {
+const executeTowerBattle = async (token, logFn, messages, originalFormation, targetFormation,climbCompleteCallback) => {
   // 1. 初始化爬塔状态
-  initClimbContext(token, logFn, messages, originalFormation, targetFormation);
+  initClimbContext(token, logFn, messages, originalFormation, targetFormation,climbCompleteCallback);
   logFn(`爬塔初始化完成，最大次数：${MAX_CLIMB_TIMES}，超时保护：${CLIMB_TIMEOUT/1000}秒`, 'info');
 
   // 2. 发送角色信息和塔信息查询指令，触发reflushRoleInfo事件（进而触发首次爬塔）
@@ -482,50 +522,53 @@ const executeTowerBattle = async (token, logFn, messages, originalFormation, tar
 /**
  * 单个Token的爬塔处理（适配useTaskManager）
  */
-const executeSingleTokenBusiness = async (token) => {
-  const messages = [];
+const executeSingleTokenBusiness = (token) => {
+  const messagesRef = ref([]);
+  const messages = messagesRef.value;
   const logFn = createSharedLogger(token.name, messages);
+  return new Promise(async (resolve, reject) => {
+    try {
+      // 1. 基础校验：WebSocket连接
+      logFn(`开始处理爬塔`, 'info');
+      const conRest = await ensureWebSocketConnected(token);
+      if (!conRest.success) {
+        logFn(`连接失败，终止爬塔`, 'error');
+        return resolve({ ...conRest, messages: messagesRef.value });
+      }
 
-  try {
-    // 1. 基础校验：WebSocket连接
-    logFn(`开始处理爬塔`, 'info');
-    const conRest = await ensureWebSocketConnected(token);
-    if (!conRest.success) {
-      logFn(`连接失败，终止爬塔`, 'error');
-      return conRest;
+      // 2. 阵容配置：获取目标阵容和原始阵容
+      const savedSettings = getSavedFormationSettings();
+      const targetFormation = savedSettings[token.id];
+      const { currentUseTeamId, formationOptions } = await getFormationInfo(token.id, token.name);
+      const originalFormation = currentUseTeamId;
+      const needSwitch = originalFormation !== targetFormation;
+
+      // 3. 切换至目标阵容
+      if (needSwitch) {
+        await switchToFormationIfNeeded(token.id, token.name, targetFormation, '爬塔阵容', logFn);
+        logFn(`已切换至爬塔阵容${targetFormation}，原始阵容${originalFormation}`, 'success');
+      } else {
+        logFn(`当前阵容${originalFormation}无需切换，直接开始爬塔`, 'success');
+      }
+
+      // 4. 设置版本序号
+      const res = await tokenStore.sendMessageWithPromise(token.id, "fight_startlevel");
+      tokenStore.setBattleVersion(res?.battleData?.version);
+      const climbCompleteCallback = () => {
+        resolve({ success: true, messages: messagesRef.value });
+      };
+      // 5. 启动事件驱动爬塔
+      await executeTowerBattle(token, logFn, messages, originalFormation, targetFormation,climbCompleteCallback);
+    } catch (error) {
+      const errorMsg = ` 爬塔处理初始化失败：${error.message}`;
+      logFn(errorMsg, 'error');
+      // 异常时清理状态
+      if (climbContextMap.has(token.id)) {
+        await stopClimb(token.id, '初始化失败');
+      }
+      reject({ success: false, messages: messagesRef.value });
     }
-
-    // 2. 阵容配置：获取目标阵容和原始阵容
-    const savedSettings = getSavedFormationSettings();
-    const targetFormation = savedSettings[token.id];
-    const { currentUseTeamId, formationOptions } = await getFormationInfo(token.id, token.name);
-    const originalFormation = currentUseTeamId;
-    const needSwitch = originalFormation !== targetFormation;
-
-    // 3. 切换至目标阵容
-    if (needSwitch) {
-      await switchToFormationIfNeeded(token.id, token.name, targetFormation, '爬塔阵容', logFn);
-      logFn(`已切换至爬塔阵容${targetFormation}，原始阵容${originalFormation}`, 'success');
-    } else {
-      logFn(`当前阵容${originalFormation}无需切换，直接开始爬塔`, 'success');
-    }
-
-    // 4. 设置版本序号
-    const res = await tokenStore.sendMessageWithPromise(token.id, "fight_startlevel");
-    tokenStore.setBattleVersion(res?.battleData?.version);
-    // 5. 启动事件驱动爬塔
-    await executeTowerBattle(token, logFn, messages, originalFormation, targetFormation);
-
-    return { success: true, messages };
-  } catch (error) {
-    const errorMsg = ` 爬塔处理初始化失败：${error.message}`;
-    logFn(errorMsg, 'error');
-    // 异常时清理状态
-    if (climbContextMap.has(token.id)) {
-      await stopClimb(token.id, '初始化失败');
-    }
-    return { success: false, messages };
-  }
+  });
 };
 
 // ========== 阵容配置相关方法 ==========
@@ -644,7 +687,7 @@ const {
   taskName: '塔防任务',
   scheduleType: 'cron',
   cronExpression: '43 2,8,14,21 * * *',
-  immediate: false,
+  immediate: true,
   executeBusiness: executeSingleTokenBusiness,
 });
 
