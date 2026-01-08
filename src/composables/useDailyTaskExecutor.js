@@ -485,7 +485,8 @@ export default function useDailyTaskExecutor() {
         }
         // 灯神免费扫荡卷
         for (let i = 0; i < 3; i++) {
-            if(!hasCompeteToday(tokenId,`genie_buysweep:${i}`)){
+            //先不扫荡了，让手动领取
+            if(false && !hasCompeteToday(tokenId,`genie_buysweep:${i}`)){
                 taskList.push({
                     name: `领取免费扫荡卷 ${i + 1}/3`,
                     execute: async () => {
