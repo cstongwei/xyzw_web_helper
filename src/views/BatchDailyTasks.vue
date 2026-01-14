@@ -3832,6 +3832,12 @@ const canClaim = (car) => {
 const batchSmartSendCar = async () => {
   if (selectedTokens.value.length === 0) return;
 
+  const week = new Date().getDay(); // 0=周日 1=周一 2=周二 3=周三 4=周四 5=周五 6=周六
+  if(![1,2,3].includes(week)){
+    batchLogger.warn("今天是周"+week+"，不需要发车！")
+    return; // 不是周一二三，直接退出，不执行任务
+  }
+
   isRunning.value = true;
   shouldStop.value = false;
   // 不再重置logs数组，保留之前的日志
@@ -4063,7 +4069,11 @@ const batchSmartSendCar = async () => {
 
 const batchClaimCars = async () => {
   if (selectedTokens.value.length === 0) return;
-
+  const week = new Date().getDay(); // 0=周日 1=周一 2=周二 3=周三 4=周四 5=周五 6=周六
+  if(![1,2,3].includes(week)){
+    batchLogger.warn("今天是周"+week+"，不需要收车！")
+    return; // 不是周一二三，直接退出，不执行任务
+  }
   isRunning.value = true;
   shouldStop.value = false;
   // 不再重置logs数组，保留之前的日志
