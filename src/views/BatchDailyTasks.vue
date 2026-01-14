@@ -1576,9 +1576,6 @@ onMounted(() => {
   );
   batchLogger.info("Initial scheduledTasks length:", scheduledTasks.value.length);
 
-  // 加载保存的任务
-  loadScheduledTasks();
-
   // 注册所有启用的任务
   scheduledTasks.value.forEach(task => {
     if (task.enabled) {
