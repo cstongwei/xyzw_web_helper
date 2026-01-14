@@ -250,6 +250,10 @@
             <label class="setting-label">BOSS次数</label>
             <n-select v-model:value="currentSettings.bossTimes" :options="bossTimesOptions" size="small" />
           </div>
+          <div class="setting-item">
+            <label class="setting-label">爬塔阵容</label>
+            <n-select v-model:value="currentSettings.towerFormation" :options="formationOptions" size="small" />
+          </div>
           <div class="setting-switches">
             <div class="switch-row">
               <span class="switch-label">领罐子</span><n-switch v-model:value="currentSettings.claimBottle" />
@@ -459,6 +463,7 @@ import { Settings } from "@vicons/ionicons5";
 import {batchLogger} from "@/utils/logger.js";
 import getAppEnvironment from "@/utils/envUtil.js";
 import TaskManager from "@/utils/taskManager.js";
+import {FormationTool} from "@/utils/FormationUtil.js";
 const env = getAppEnvironment();
 batchLogger.info("当前环境:", env.toString());
 // Initialize token store, message service, and task runner
@@ -466,6 +471,7 @@ const tokenStore = useTokenStore();
 const message = useMessage();
 const runner = new DailyTaskRunner(tokenStore);
 
+const formationTool = new FormationTool(tokenStore);
 const tokens = computed(() => tokenStore.gameTokens);
 const isCarActivityOpen = computed(() => {
   const day = new Date().getDay();
@@ -521,6 +527,7 @@ const currentSettings = reactive({
   arenaFormation: 1,
   bossFormation: 1,
   bossTimes: 2,
+  towerFormation:2,
   claimBottle: true,
   payRecruit: true,
   openBox: true,
@@ -562,7 +569,6 @@ const taskForm = reactive({
   selectedTasks: [], // Selected task function names
   enabled: true, // Whether the task is enabled
 });
-
 // Available tasks for scheduling - Maps task function names to display labels
 const availableTasks = [
   { label: "日常任务", value: "startBatch" },
@@ -2097,6 +2103,7 @@ const loadSettings = (tokenId) => {
       arenaFormation: 1,
       bossFormation: 1,
       bossTimes: 2,
+      towerFormation: 1,
       claimBottle: true,
       payRecruit: true,
       openBox: true,
@@ -3006,7 +3013,8 @@ const climbTower = async () => {
     currentProgress.value = 0;
 
     const token = tokens.value.find((t) => t.id === tokenId);
-
+    let switchFormation = false
+    let originFormation;
     try {
       addLog({
         time: new Date().toLocaleTimeString(),
@@ -3015,7 +3023,22 @@ const climbTower = async () => {
       });
 
       await ensureConnection(tokenId);
-
+      // 切换爬塔阵容
+      //获取配置
+      const settings = this.loadSettings(tokenId)
+      originFormation = await formationTool.getCurrentFormation(tokenId,
+          {
+            onLog: (log) => addLog(log)
+          });
+      switchFormation = Number(originFormation) !== Number(settings.towerFormation)
+      if(switchFormation){
+        await formationTool.switchFormation(tokenId,
+            settings.towerFormation,
+            "爬塔阵容",
+            {
+              onLog: (log) => addLog(log),
+              })
+      }
       // Initial check
       // 模仿 TowerStatus.vue 的逻辑，同时请求 tower_getinfo 和 role_getroleinfo
       await tokenStore
@@ -3117,8 +3140,16 @@ const climbTower = async () => {
         message: `爬塔失败: ${error.message}`,
         type: "error",
       });
+    }finally {
+      if(switchFormation){
+        await formationTool.switchFormation(tokenId,
+            originFormation,
+            "还原阵容",
+            {
+              onLog: (log) => addLog(log),
+            })
+      }
     }
-
     currentProgress.value = 100;
     await new Promise((r) => setTimeout(r, 500));
   }
