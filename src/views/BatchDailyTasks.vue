@@ -215,8 +215,18 @@
           <n-progress type="line" :percentage="currentProgress" :indicator-placement="'inside'" processing />
           <div class="log-container" ref="logContainer">
             <div v-for="(log, index) in logs" :key="index" class="log-item" :class="log.type">
+              <span class="log-icon">
+                {{{ error: '❌', success: '✅', warning: '⚠️', info: 'ℹ️', debug: '🔧' }[log.type || 'info']}}
+              </span>
               <span class="time">{{ log.time }}</span>
-              <span class="message">{{ log.message }}</span>
+              <span class="message"
+                    :class="{
+                       'text-red-500': log.type === 'error',
+                       'text-green-500': log.type === 'success',
+                       'text-yellow-500': log.type === 'warning',
+                       'text-blue-500': log.type === 'info',
+                       'text-gray-500': log.type === 'debug'}"
+              >{{ log.message }}</span>
             </div>
           </div>
         </n-card>
@@ -446,7 +456,11 @@ import { DailyTaskRunner } from "@/utils/dailyTaskRunner";
 import { preloadQuestions } from "@/utils/studyQuestionsFromJSON.js";
 import { useMessage } from "naive-ui";
 import { Settings } from "@vicons/ionicons5";
-
+import {batchLogger} from "@/utils/logger.js";
+import getAppEnvironment from "@/utils/envUtil.js";
+import TaskManager from "@/utils/taskManager.js";
+const env = getAppEnvironment();
+batchLogger.info("当前环境:", env.toString());
 // Initialize token store, message service, and task runner
 const tokenStore = useTokenStore();
 const message = useMessage();
@@ -835,6 +849,26 @@ const saveTask = () => {
   );
   console.log("Scheduled tasks:", scheduledTasks.value);
 
+  const config = {
+    type: taskData.runType === "cron" ? "cron" : "interval",
+    cronExpression: taskData.runType === "cron" ? taskData.cronExpression : "",
+    interval: taskData.runType === "daily" ? 24 * 60 * 60 * 1000 : null,
+    immediate: false
+  };
+
+  // 创建任务执行函数
+  const executor = () => executeScheduledTask(taskData);
+
+  // 注册任务到TaskManager
+  if (TaskManager.registerTask(taskData.id, config, executor)) {
+    if (taskData.enabled) {
+      TaskManager.activateTask(taskData.id);
+    }
+    batchLogger.info(`[TaskManager] 任务 ${taskData.id} 注册成功`);
+  } else {
+    batchLogger.error(`[TaskManager] 任务 ${taskData.id} 注册失败`);
+  }
+
   // Add log entry for task save
   addTaskSaveLog(taskData, isNew);
 
@@ -844,6 +878,7 @@ const saveTask = () => {
 
 // Delete task
 const deleteTask = (taskId) => {
+  TaskManager.unregisterTask(taskId);
   const task = scheduledTasks.value.find((t) => t.id === taskId);
   if (task) {
     scheduledTasks.value = scheduledTasks.value.filter((t) => t.id !== taskId);
@@ -859,6 +894,11 @@ const deleteTask = (taskId) => {
 
 // Toggle task enabled state
 const toggleTaskEnabled = (taskId, enabled) => {
+  if (enabled) {
+    TaskManager.activateTask(taskId);
+  } else {
+    TaskManager.deactivateTask(taskId);
+  }
   const task = scheduledTasks.value.find((t) => t.id === taskId);
   if (task) {
     task.enabled = enabled;
@@ -1500,8 +1540,6 @@ const startCountdown = () => {
 // Scheduled Tasks Scheduler
 // ======================
 
-// Initialize scheduled tasks from localStorage
-loadScheduledTasks();
 
 // Watch for changes to scheduledTasks for debugging
 watch(
@@ -1530,23 +1568,65 @@ watch(
 
 // Debug: Log initial state when component mounts
 onMounted(() => {
-  console.log(
-    "Component mounted, initial scheduledTasks:",
-    scheduledTasks.value,
+  // Initialize scheduled tasks from localStorage
+  loadScheduledTasks();
+  batchLogger.info(
+      "Component mounted, initial scheduledTasks:",
+      scheduledTasks.value,
   );
-  console.log("Initial scheduledTasks length:", scheduledTasks.value.length);
-  // Start the task scheduler after all functions are initialized
-  scheduleTaskExecution();
-  // Start countdown timer
+  batchLogger.info("Initial scheduledTasks length:", scheduledTasks.value.length);
+
+  // 加载保存的任务
+  loadScheduledTasks();
+
+  // 注册所有启用的任务
+  scheduledTasks.value.forEach(task => {
+    if (task.enabled) {
+      const config = {
+        type: task.runType === "cron" ? "cron" : "interval",
+        cronExpression: task.runType === "cron" ? task.cronExpression : "",
+        interval: task.runType === "daily" ? 24 * 60 * 60 * 1000 : null,
+        immediate: false
+      };
+
+      const executor = () => executeScheduledTask(task);
+
+      if (TaskManager.registerTask(task.id, config, executor)) {
+        TaskManager.activateTask(task.id);
+        batchLogger.info(`[TaskManager] 任务 ${task.id} 已注册并激活`);
+      } else {
+        batchLogger.error(`[TaskManager] 任务 ${task.id} 注册失败`);
+      }
+    }
+  });
+
+  // 启动倒计时
   startCountdown();
+
+  // 添加环境信息日志
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: `=== 定时任务系统已启动 [${env.isDesktop ? 'Electron' : 'Browser'}] ===`,
+    type: "info"
+  });
 });
 
 // Cleanup countdown interval on unmount
 onBeforeUnmount(() => {
+  scheduledTasks.value.forEach(task => {
+    TaskManager.unregisterTask(task.id);
+  });
+
   if (countdownInterval) {
     clearInterval(countdownInterval);
     countdownInterval = null;
   }
+
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: "=== 定时任务调度服务已停止 ===",
+    type: "info",
+  });
 });
 
 // Task scheduler - ensure it runs properly
@@ -1914,7 +1994,7 @@ const verifyTaskDependencies = async (task) => {
 const executeScheduledTask = async (task) => {
   addLog({
     time: new Date().toLocaleTimeString(),
-    message: `=== 开始执行定时任务: ${task.name} ===`,
+    message: `=== 开始执行定时任务: ${task.name} [${env.isDesktop ? 'Electron' : 'Browser'}] ===`,
     type: "info",
   });
 
@@ -2140,6 +2220,7 @@ const calculateMonthProgress = () => {
 };
 
 const addLog = (log) => {
+
   logs.value.push(log);
   nextTick(() => {
     if (logContainer.value && autoScrollLog.value) {

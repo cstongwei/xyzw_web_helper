@@ -2,6 +2,7 @@
  * 智能日志管理系统
  * 支持日志级别控制和开发/生产环境区分
  */
+import getAppEnvironment from "@/utils/envUtil.js";
 
 // 日志级别定义
 export const LOG_LEVELS = {
@@ -18,6 +19,7 @@ class Logger {
     this.level = this.getLogLevel();
     this.isDev = import.meta.env.DEV;
     this.enableVerbose = localStorage.getItem("ws_debug_verbose") === "true";
+    this.isElectron = getAppEnvironment().isElectron;
   }
 
   getLogLevel() {
@@ -58,31 +60,51 @@ class Logger {
 
   error(message, ...args) {
     if (this.level >= LOG_LEVELS.ERROR) {
-      console.error(...this.formatMessage(LOG_LEVELS.ERROR, message, ...args));
+      const formatted = this.formatMessage(LOG_LEVELS.ERROR, message, ...args);
+      console.error(...formatted);
+      if(this.isElectron){
+        window.appLogger.error(...formatted);
+      }
     }
   }
 
   warn(message, ...args) {
     if (this.level >= LOG_LEVELS.WARN) {
-      console.warn(...this.formatMessage(LOG_LEVELS.WARN, message, ...args));
+      const formatted = this.formatMessage(LOG_LEVELS.WARN, message, ...args);
+      console.warn(...formatted);
+      if(this.isElectron){
+        window.appLogger.warn(...formatted);
+      }
     }
   }
 
   info(message, ...args) {
     if (this.level >= LOG_LEVELS.INFO) {
-      console.info(...this.formatMessage(LOG_LEVELS.INFO, message, ...args));
+      const formatted = this.formatMessage(LOG_LEVELS.INFO, message, ...args);
+      console.info(...formatted);
+      if(this.isElectron){
+        window.appLogger.info(...formatted);
+      }
     }
   }
 
   debug(message, ...args) {
     if (this.level >= LOG_LEVELS.DEBUG) {
-      console.log(...this.formatMessage(LOG_LEVELS.DEBUG, message, ...args));
+      const formatted = this.formatMessage(LOG_LEVELS.DEBUG, message, ...args);
+      console.log(...formatted);
+      if(this.isElectron){
+        window.appLogger.log(...formatted);
+      }
     }
   }
 
   verbose(message, ...args) {
     if (this.enableVerbose && this.level >= LOG_LEVELS.VERBOSE) {
-      console.log(...this.formatMessage(LOG_LEVELS.VERBOSE, message, ...args));
+      const formatted = this.formatMessage(LOG_LEVELS.VERBOSE, message, ...args);
+      console.log(...formatted);
+      if(this.isElectron){
+        window.appLogger.log(...formatted);
+      }
     }
   }
 
@@ -132,7 +154,7 @@ export const createLogger = (namespace) => new Logger(namespace);
 export const wsLogger = createLogger("WS");
 export const tokenLogger = createLogger("TOKEN");
 export const gameLogger = createLogger("GAME");
-
+export const batchLogger = createLogger("BATCH");
 // 全局日志控制函数
 export const setGlobalLogLevel = (level) => {
   wsLogger.setLevel(level);
