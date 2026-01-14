@@ -47,6 +47,16 @@ class Logger {
     localStorage.setItem("ws_debug_verbose", enabled.toString());
   }
 
+  _parseLogArg(arg) {
+    if (arg === null || arg === undefined) return String(arg);
+    // 如果是Error对象，返回完整的错误栈，方便排查问题
+    if (arg instanceof Error) return arg.stack || arg.message;
+    // 如果是对象/数组，格式化JSON字符串展示
+    if (typeof arg === 'object') return JSON.stringify(arg, null, 2);
+    // 普通类型直接转字符串
+    return String(arg);
+  }
+
   formatMessage(level, message, ...args) {
     const timestamp = new Date().toLocaleTimeString("zh-CN", {
       hour12: false,
@@ -63,7 +73,8 @@ class Logger {
       const formatted = this.formatMessage(LOG_LEVELS.ERROR, message, ...args);
       console.error(...formatted);
       if(this.isElectron){
-        window.appLogger.error(...formatted);
+        const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
+        window.appLogger.error(logStr);
       }
     }
   }
@@ -73,7 +84,8 @@ class Logger {
       const formatted = this.formatMessage(LOG_LEVELS.WARN, message, ...args);
       console.warn(...formatted);
       if(this.isElectron){
-        window.appLogger.warn(...formatted);
+        const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
+        window.appLogger.warn(logStr);
       }
     }
   }
@@ -83,7 +95,8 @@ class Logger {
       const formatted = this.formatMessage(LOG_LEVELS.INFO, message, ...args);
       console.info(...formatted);
       if(this.isElectron){
-        window.appLogger.info(...formatted);
+        const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
+        window.appLogger.info(logStr);
       }
     }
   }
@@ -93,7 +106,8 @@ class Logger {
       const formatted = this.formatMessage(LOG_LEVELS.DEBUG, message, ...args);
       console.log(...formatted);
       if(this.isElectron){
-        window.appLogger.log(...formatted);
+        const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
+        window.appLogger.log(logStr);
       }
     }
   }
@@ -103,7 +117,8 @@ class Logger {
       const formatted = this.formatMessage(LOG_LEVELS.VERBOSE, message, ...args);
       console.log(...formatted);
       if(this.isElectron){
-        window.appLogger.log(...formatted);
+        const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
+        window.appLogger.log(logStr);
       }
     }
   }
