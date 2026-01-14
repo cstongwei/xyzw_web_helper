@@ -2598,9 +2598,9 @@ const batchmengjing = async () => {
       const mjbattleTeam = { 0: 107 };
       const dayOfWeek = new Date().getDay();
       if (
-        (dayOfWeek === 0) |
-        (dayOfWeek === 1) |
-        (dayOfWeek === 3) |
+        (dayOfWeek === 0) ||
+        (dayOfWeek === 1) ||
+        (dayOfWeek === 3) ||
         (dayOfWeek === 4)
       ) {
         await tokenStore.sendMessageWithPromise(
