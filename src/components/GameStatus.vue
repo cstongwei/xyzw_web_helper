@@ -1,15 +1,25 @@
 <template>
-  <div class="game-status-container" :class="activeSection === 'fightPvp'?'full-grid':''">
+  <div
+    class="game-status-container"
+    :class="activeSection === 'fightPvp' ? 'full-grid' : ''"
+  >
     <!-- 身份牌常驻（嵌入式，Tabs 上方） -->
     <IdentityCard embedded />
 
     <!-- 下方选卡分区切换（Tabs）：日常｜俱乐部｜活动 -->
-    <n-tabs class="section-tabs" v-model:value="activeSection" type="line" animated size="small">
+    <n-tabs
+      class="section-tabs"
+      v-model:value="activeSection"
+      type="line"
+      animated
+      size="small"
+    >
       <n-tab-pane name="daily" tab="日常" />
       <n-tab-pane name="club" tab="俱乐部" />
       <n-tab-pane name="activity" tab="活动" />
       <n-tab-pane v-if="ENABLE_TOOLS_TAB" name="tools" tab="工具" />
       <n-tab-pane name="warrank" tab="盐场" />
+      <n-tab-pane name="peach" tab="蟠桃园" />
       <n-tab-pane name="toprank" tab="巅峰榜" />
       <n-tab-pane name="topclubrank" tab="俱乐部榜" />
       <n-tab-pane name="goldclubrank" tab="黄金积分榜" />
@@ -24,6 +34,9 @@
 
     <!-- 咸将塔状态 -->
     <TowerStatus v-show="activeSection === 'daily' && isShowTowerStatus" />
+
+    <!-- 怪异塔状态 -->
+    <WeirdTowerStatus v-show="activeSection === 'daily'" />
 
     <!-- 盐罐机器人状态（提取组件） -->
     <BottleHelperCard v-show="activeSection === 'daily'" />
@@ -42,10 +55,35 @@
 
     <!-- 升星助手（提取组件） -->
     <StarUpgradeCard v-if="activeSection === 'tools'" />
+
+    <!-- 竞技场助手（提取组件） -->
+    <FightHelperCard v-if="activeSection === 'tools'" />
+
+    <!-- 梦境助手（提取组件） -->
+    <DreamHelperCard v-if="activeSection === 'tools'" />
+
+    <!-- 武将升级助手（提取组件） -->
+    <HeroUpgradeCard v-if="activeSection === 'tools'" />
+
+    <!-- 洗练助手（提取组件） -->
+    <RefineHelperCard v-if="activeSection === 'tools'" />
+
+    <!-- 消耗活动进度（提取组件） -->
+    <ConsumptionProgressCard v-if="activeSection === 'tools'" />
+    <!-- 咸王宝库（提取组件） -->
+    <BossTower v-if="activeSection === 'tools'" />
+
     <!-- 俱乐部排位（暂时隐藏） -->
-    <div class="status-card legion-match" v-if="ENABLE_LEGION_MATCH && activeSection === 'club'">
+    <div
+      class="status-card legion-match"
+      v-if="ENABLE_LEGION_MATCH && activeSection === 'club'"
+    >
       <div class="card-header">
-        <img src="/icons/1733492491706152.png" alt="俱乐部图标" class="status-icon" />
+        <img
+          src="/icons/1733492491706152.png"
+          alt="俱乐部图标"
+          class="status-icon"
+        />
         <div class="status-info">
           <h3>俱乐部排位</h3>
           <p>赛事状态</p>
@@ -60,7 +98,11 @@
           每逢周三周四周五有比赛<br />
           立即报名参与精彩对决！
         </p>
-        <button class="action-button" :disabled="legionMatch.isRegistered" @click="registerLegionMatch">
+        <button
+          class="action-button"
+          :disabled="legionMatch.isRegistered"
+          @click="registerLegionMatch"
+        >
           {{ legionMatch.isRegistered ? "已报名" : "立即报名" }}
         </button>
       </div>
@@ -69,9 +111,16 @@
     <!-- 俱乐部赛车（合并自俱乐部赛车 + 疯狂赛车） -->
 
     <!-- 俱乐部签到（已迁移到俱乐部信息-概览，故隐藏原卡片） -->
-    <div class="status-card legion-signin" v-if="ENABLE_LEGION_SIGNIN_CARD && activeSection === 'club'">
+    <div
+      class="status-card legion-signin"
+      v-if="ENABLE_LEGION_SIGNIN_CARD && activeSection === 'club'"
+    >
       <div class="card-header">
-        <img src="/icons/1733492491706148.png" alt="签到图标" class="status-icon" />
+        <img
+          src="/icons/1733492491706148.png"
+          alt="签到图标"
+          class="status-icon"
+        />
         <div class="status-info">
           <h3>俱乐部签到</h3>
           <p>每日签到状态</p>
@@ -88,7 +137,11 @@
         </p>
         <p v-else class="description">尚未加入任何俱乐部</p>
         <div class="action-row">
-          <button class="action-button" :disabled="legionSignin.isSignedIn" @click="signInLegion">
+          <button
+            class="action-button"
+            :disabled="legionSignin.isSignedIn"
+            @click="signInLegion"
+          >
             {{ legionSignin.isSignedIn ? "已签到" : "立即签到" }}
           </button>
         </div>
@@ -104,21 +157,26 @@
 
     <!-- 咸鱼大冲关（提取组件） -->
     <StudyChallengeCard v-show="activeSection === 'activity'" />
-	
-	<!-- 盐场（提取组件） -->
-	<ClubWarrank v-if="activeSection === 'warrank'" />
-	
-	<!-- 巅峰榜（提取组件） -->
+
+    <!-- 盐场（提取组件） -->
+    <div class="warrank-full-container" v-if="activeSection === 'warrank'">
+      <ClubWarrank />
+    </div>
+
+    <!-- 巅峰榜（提取组件） -->
     <TopRankList v-if="activeSection === 'toprank'" />
-    
+
     <!-- 百服俱乐部（提取组件） -->
     <TopClubList v-if="activeSection === 'topclubrank'" />
 
     <!-- 黄金积分（提取组件） -->
     <GoldClubList v-if="activeSection === 'goldclubrank'" />
-    
+
     <!-- 切磋（提取组件） -->
-    <fightPvp v-if="activeSection === 'fightPvp'"  />
+    <fightPvp v-if="activeSection === 'fightPvp'" />
+
+    <!-- 蟠桃园（提取组件） -->
+    <PeachinfoCard v-if="activeSection === 'peach'" />
   </div>
 </template>
 
@@ -126,7 +184,10 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useTokenStore } from "@/stores/tokenStore";
 import { useMessage } from "naive-ui";
-import { preloadQuestions, getQuestionCount } from "@/utils/studyQuestionsFromJSON.js";
+import {
+  preloadQuestions,
+  getQuestionCount,
+} from "@/utils/studyQuestionsFromJSON.js";
 import BottleHelperCard from "./cards/BottleHelperCard.vue";
 import BoxHelperCard from "./cards/BoxHelperCard.vue";
 import FishHelperCard from "./cards/FishHelperCard.vue";
@@ -135,12 +196,20 @@ import StarUpgradeCard from "./cards/StarUpgradeCard.vue";
 import HangUpStatusCard from "./cards/HangUpStatusCard.vue";
 import MonthlyTasksCard from "./cards/MonthlyTasksCard.vue";
 import StudyChallengeCard from "./cards/StudyChallengeCard.vue";
-import ClubWarrank from './Club/ClubWarrank.vue';
-import TopRankList from './cards/TopRankListPageCard.vue';
-import TopClubList from './cards/TopClubListPageCard.vue';
-import GoldClubList from './cards/GoldRankListPageCard.vue';
-import FightPvp from './cards/FightPvp.vue';
-
+import ClubWarrank from "./Club/ClubWarrank.vue";
+import TopRankList from "./cards/TopRankListPageCard.vue";
+import TopClubList from "./cards/TopClubListPageCard.vue";
+import GoldClubList from "./cards/GoldRankListPageCard.vue";
+import FightPvp from "./cards/FightPvp.vue";
+import FightHelperCard from "./cards/FightHelperCard.vue";
+import DreamHelperCard from "./cards/DreamHelperCard.vue";
+import HeroUpgradeCard from "./cards/HeroUpgradeCard.vue";
+import ConsumptionProgressCard from "./cards/ConsumptionProgressCard.vue";
+import RefineHelperCard from "./cards/RefineHelperCard.vue";
+import TowerStatus from "./Tower/TowerStatus.vue";
+import WeirdTowerStatus from "./Tower/WeirdTowerStatus.vue";
+import BossTower from "./Tower/BossTower.vue";
+import PeachinfoCard from "./Club/PeachInfo.vue";
 const tokenStore = useTokenStore();
 const message = useMessage();
 
@@ -204,7 +273,7 @@ const isConnected = computed(() => {
 });
 
 // 格式化时间 - 确保显示到秒
-const formatTime = seconds => {
+const formatTime = (seconds) => {
   // 确保传入值为数字，并向下取整到秒
   const totalSeconds = Math.floor(Number(seconds) || 0);
 
@@ -229,7 +298,10 @@ const updateGameStatus = () => {
     bottleHelper.value.stopTime = role.bottleHelpers.helperStopTime;
     bottleHelper.value.isRunning = role.bottleHelpers.helperStopTime > now;
     // 确保剩余时间为整数秒
-    bottleHelper.value.remainingTime = Math.max(0, Math.floor(role.bottleHelpers.helperStopTime - now));
+    bottleHelper.value.remainingTime = Math.max(
+      0,
+      Math.floor(role.bottleHelpers.helperStopTime - now),
+    );
     // 控制台精简，避免频繁刷屏
   }
 
@@ -242,14 +314,18 @@ const updateGameStatus = () => {
     const elapsed = now - hangUp.value.lastTime;
     if (elapsed <= hangUp.value.hangUpTime) {
       // 确保剩余时间为整数秒
-      hangUp.value.remainingTime = Math.floor(hangUp.value.hangUpTime - elapsed);
+      hangUp.value.remainingTime = Math.floor(
+        hangUp.value.hangUpTime - elapsed,
+      );
       hangUp.value.isActive = true;
     } else {
       hangUp.value.remainingTime = 0;
       hangUp.value.isActive = false;
     }
     // 确保已挂机时间为整数秒
-    hangUp.value.elapsedTime = Math.floor(hangUp.value.hangUpTime - hangUp.value.remainingTime);
+    hangUp.value.elapsedTime = Math.floor(
+      hangUp.value.hangUpTime - hangUp.value.remainingTime,
+    );
     // 控制台精简
   }
 
@@ -259,7 +335,9 @@ const updateGameStatus = () => {
     today.setHours(0, 0, 0, 0);
     const todayTimestamp = today.getTime() / 1000;
 
-    legionMatch.value.isRegistered = Number(role.statistics["last:legion:match:sign:up:time"]) > todayTimestamp;
+    legionMatch.value.isRegistered =
+      Number(role.statistics["last:legion:match:sign:up:time"]) >
+      todayTimestamp;
   }
 
   // 更新俱乐部签到状态
@@ -268,7 +346,8 @@ const updateGameStatus = () => {
     today.setHours(0, 0, 0, 0);
     const todayTimestamp = today.getTime() / 1000;
 
-    legionSignin.value.isSignedIn = role.statisticsTime["legion:sign:in"] > todayTimestamp;
+    legionSignin.value.isSignedIn =
+      role.statisticsTime["legion:sign:in"] > todayTimestamp;
   }
 };
 
@@ -279,7 +358,10 @@ const startTimer = () => {
   timer = setInterval(() => {
     // 更新盐罐机器人剩余时间
     if (bottleHelper.value.isRunning && bottleHelper.value.remainingTime > 0) {
-      bottleHelper.value.remainingTime = Math.max(0, bottleHelper.value.remainingTime - 1);
+      bottleHelper.value.remainingTime = Math.max(
+        0,
+        bottleHelper.value.remainingTime - 1,
+      );
       if (bottleHelper.value.remainingTime <= 0) {
         bottleHelper.value.isRunning = false;
       }
@@ -312,7 +394,9 @@ const handleBottleHelper = () => {
     tokenStore.sendMessage(tokenId, "role_getroleinfo");
   }, 500);
 
-  message.info(bottleHelper.value.isRunning ? "重启盐罐机器人" : "启动盐罐机器人");
+  message.info(
+    bottleHelper.value.isRunning ? "重启盐罐机器人" : "启动盐罐机器人",
+  );
 };
 
 // 挂机操作 - 参考HangUpStatus逻辑优化
@@ -332,13 +416,17 @@ const extendHangUp = async () => {
     // 按照参考代码的逻辑，发送4次分享回调请求
     const promises = [];
     for (let i = 0; i < 4; i++) {
-      const promise = new Promise(resolve => {
+      const promise = new Promise((resolve) => {
         setTimeout(() => {
           // 降噪
-          const result = tokenStore.sendMessage(tokenId, "system_mysharecallback", {
-            isSkipShareCard: true,
-            type: 2,
-          });
+          const result = tokenStore.sendMessage(
+            tokenId,
+            "system_mysharecallback",
+            {
+              isSkipShareCard: true,
+              type: 2,
+            },
+          );
           resolve(result);
         }, i * 300); // 增加间隔时间确保稳定性
       });
@@ -429,19 +517,22 @@ const ENABLE_TOOLS_TAB = true; // 工具分区开关
 // 监听角色信息变化
 watch(
   roleInfo,
-  newValue => {
+  (newValue) => {
     if (newValue) {
       updateGameStatus();
     }
   },
-  { deep: true, immediate: true }
+  { deep: true, immediate: true },
 );
 
 // 监听 WebSocket 连接状态（俱乐部信息）
 const hasFetchedLegionOnce = ref(false);
 watch(
-  () => (tokenStore.selectedToken ? tokenStore.getWebSocketStatus(tokenStore.selectedToken.id) : "disconnected"),
-  status => {
+  () =>
+    tokenStore.selectedToken
+      ? tokenStore.getWebSocketStatus(tokenStore.selectedToken.id)
+      : "disconnected",
+  (status) => {
     if (status === "connected") {
       if (!hasFetchedLegionOnce.value && tokenStore.selectedToken) {
         hasFetchedLegionOnce.value = true;
@@ -449,7 +540,7 @@ watch(
         tokenStore.sendMessage(tokenId, "legion_getinfo");
       }
     }
-  }
+  },
 );
 
 // 战绩加载逻辑现由俱乐部信息模块负责
@@ -459,7 +550,10 @@ onMounted(() => {
   updateGameStatus();
   startTimer();
   // 获取俱乐部信息
-  if (tokenStore.selectedToken && tokenStore.getWebSocketStatus(tokenStore.selectedToken.id) === "connected") {
+  if (
+    tokenStore.selectedToken &&
+    tokenStore.getWebSocketStatus(tokenStore.selectedToken.id) === "connected"
+  ) {
     const tokenId = tokenStore.selectedToken.id;
     tokenStore.sendMessage(tokenId, "legion_getinfo");
     hasFetchedLegionOnce.value = true;
@@ -501,11 +595,13 @@ onUnmounted(() => {
 
   @media (max-width: 768px) {
     grid-template-columns: minmax(0, 1fr);
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm);
+    gap: var(--spacing-md);
   }
 }
-.full-grid{
-    grid-template-columns: repeat(1, 1fr);     
+
+.full-grid {
+  grid-template-columns: repeat(1, 1fr);
 }
 
 .section-header {
@@ -513,7 +609,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px var(--spacing-lg);
+  padding: 8px var(--spacing-sm);
 }
 
 .identity-toggle {
@@ -527,13 +623,27 @@ onUnmounted(() => {
 }
 
 .section-tabs {
-  margin: 0 var(--spacing-lg) var(--spacing-md) var(--spacing-lg);
+  margin: 0 var(--spacing-sm) var(--spacing-md) var(--spacing-sm);
   grid-column: 1 / -1;
   border-bottom: 1px solid var(--border-light);
+  overflow: auto;
 }
 
 .section-tabs :deep(.n-tabs-pane-wrapper) {
   display: none;
+}
+
+.warrank-full-container {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: calc(100vh - 200px);
+  min-height: 600px;
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    height: calc(100vh - 180px);
+    min-height: 500px;
+  }
 }
 
 .monthly-tasks .description.muted {
@@ -570,19 +680,24 @@ onUnmounted(() => {
     color: var(--text-primary);
     text-align: center;
     margin-bottom: var(--spacing-md);
-    font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", "Consolas", monospace;
+    font-family:
+      "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", "Consolas", monospace;
     letter-spacing: 0.1em;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
     background: var(--bg-tertiary);
     padding: 0.75rem 1rem;
     border-radius: 0.5rem;
     border: 1px solid var(--border-light);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.1),
+      0 1px 2px rgba(0, 0, 0, 0.06);
     transition: all 0.2s ease-in-out;
 
     &:hover {
       transform: translateY(-1px);
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+      box-shadow:
+        0 4px 6px rgba(0, 0, 0, 0.1),
+        0 2px 4px rgba(0, 0, 0, 0.06);
     }
   }
 
@@ -659,7 +774,7 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .game-status-container {
     grid-template-columns: 1fr;
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm);
   }
 
   .status-card {
@@ -667,9 +782,17 @@ onUnmounted(() => {
   }
 
   .card-header {
-    flex-direction: column;
-    text-align: center;
+    flex-wrap: wrap;
     gap: var(--spacing-sm);
+
+    .status-info {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .status-badge {
+      margin-left: auto;
+    }
   }
 }
 </style>

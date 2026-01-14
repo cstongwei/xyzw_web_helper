@@ -1,7 +1,7 @@
 <template>
   <MyCard class="bottle-helper" :statusClass="{ active: state.isRunning }">
     <template #icon>
-      <img src="/box/zsbx.png" alt="宝箱图标" />
+      <img :src="iconPath" alt="宝箱图标" />
     </template>
     <template #title>
       <h3>宝箱助手</h3>
@@ -31,9 +31,19 @@
       </div>
     </template>
     <template #action>
-      <a-button type="primary" :disabled="state.isRunning" secondary size="small" block @click="handleBoxHelper">
+      <a-button
+        type="primary"
+        :disabled="state.isRunning"
+        secondary
+        size="small"
+        block
+        @click="handleBoxHelper"
+      >
         {{ state.isRunning ? "运行中" : "开启宝箱" }}
       </a-button>
+      <a-button type="primary" size="small" @click="batchclaimboxpointreward"
+        >领取宝箱积分</a-button
+      >
     </template>
   </MyCard>
 </template>
@@ -47,28 +57,32 @@ import MyCard from "../Common/MyCard.vue";
 const tokenStore = useTokenStore();
 const message = useMessage();
 
+const iconPath = computed(() => import.meta.env.BASE_URL + "box/zsbx.png");
+
 const roleInfo = computed(() => tokenStore.gameData?.roleInfo || null);
 
 const boxDataList = computed(() => {
+  const getImgPath = (path) =>
+    import.meta.env.BASE_URL + path.replace(/^\//, "");
   return [
     {
       type: "木质宝箱",
-      img: "/box/mzbx.png",
+      img: getImgPath("/box/mzbx.png"),
       count: roleInfo.value?.role?.items?.[2001]?.quantity || 0,
     },
     {
       type: "青铜宝箱",
-      img: "/box/qtbx.png",
+      img: getImgPath("/box/qtbx.png"),
       count: roleInfo.value?.role?.items?.[2002]?.quantity || 0,
     },
     {
       type: "黄金宝箱",
-      img: "/box/hjbx.png",
+      img: getImgPath("/box/hjbx.png"),
       count: roleInfo.value?.role?.items?.[2003]?.quantity || 0,
     },
     {
       type: "铂金宝箱",
-      img: "/box/bjbx.png",
+      img: getImgPath("/box/bjbx.png"),
       count: roleInfo.value?.role?.items?.[2004]?.quantity || 0,
     },
   ];
@@ -105,6 +119,18 @@ const state = ref({
   isRunning: false,
 });
 
+const batchclaimboxpointreward = async () => {
+  if (!tokenStore.selectedToken) {
+    message.warning("请先选择Token");
+    return;
+  }
+  const tokenId = tokenStore.selectedToken.id;
+  await tokenStore.sendMessage(tokenId, "item_batchclaimboxpointreward");
+  await new Promise((r) => setTimeout(r, 500));
+  await tokenStore.sendMessage(tokenId, "role_getroleinfo");
+  message.success("宝箱积分领取完毕");
+};
+
 const handleBoxHelper = async () => {
   if (!tokenStore.selectedToken) {
     message.warning("请先选择Token");
@@ -117,12 +143,24 @@ const handleBoxHelper = async () => {
     const batches = Math.floor(number.value / 10);
     const remainder = number.value % 10;
     for (let i = 0; i < batches; i++) {
-      const result = await tokenStore.sendMessageWithPromise(tokenId, "item_openbox", { itemId: type.value, number: 10 });
+      const result = await tokenStore.sendMessageWithPromise(
+        tokenId,
+        "item_openbox",
+        { itemId: type.value, number: 10 },
+      );
     }
     if (remainder > 0) {
-      const result = await tokenStore.sendMessageWithPromise(tokenId, "item_openbox", { itemId: type.value, number: remainder });
+      const result = await tokenStore.sendMessageWithPromise(
+        tokenId,
+        "item_openbox",
+        { itemId: type.value, number: remainder },
+      );
     }
+    await tokenStore.sendMessage(tokenId, "item_batchclaimboxpointreward");
+    await new Promise((r) => setTimeout(r, 500));
     await tokenStore.sendMessage(tokenId, "role_getroleinfo");
+    // 更新活动进度
+    tokenStore.sendMessage(tokenId, "activity_get");
     message.success("宝箱开启完毕");
     state.value.isRunning = false;
     return;
@@ -146,7 +184,7 @@ const handleBoxHelper = async () => {
       flex-direction: column;
       align-items: center;
 
-      >img {
+      > img {
         width: 40px;
         height: 40px;
       }

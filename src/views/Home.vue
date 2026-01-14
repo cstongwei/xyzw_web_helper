@@ -5,11 +5,7 @@
       <div class="container">
         <div class="nav-content">
           <div class="nav-brand">
-            <img
-              src="/icons/xiaoyugan.png"
-              alt="XYZW"
-              class="brand-logo"
-            >
+            <img src="/icons/xiaoyugan.png" alt="XYZW" class="brand-logo" />
             <span class="brand-text">XYZW 游戏管理系统</span>
           </div>
 
@@ -53,31 +49,81 @@
       </div>
     </nav>
 
-    <n-drawer v-model:show="isMobileMenuOpen" placement="left" style="width: 260px">
+    <n-drawer
+      v-model:show="isMobileMenuOpen"
+      placement="left"
+      style="width: 260px"
+    >
       <div class="drawer-menu">
-        <router-link to="/" class="drawer-item" @click="isMobileMenuOpen = false">
-          <n-icon><Ribbon /></n-icon>
+        <router-link
+          to="/"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <Ribbon />
+          </n-icon>
           <span>首页</span>
         </router-link>
-        <router-link to="/admin/dashboard" class="drawer-item" @click="isMobileMenuOpen = false">
-          <n-icon><Settings /></n-icon>
+        <router-link
+          to="/admin/dashboard"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <Settings />
+          </n-icon>
           <span>控制台</span>
         </router-link>
-        <router-link to="/admin/game-features" class="drawer-item" @click="isMobileMenuOpen = false">
-          <n-icon><Cube /></n-icon>
+        <router-link
+          to="/admin/game-features"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <Cube />
+          </n-icon>
           <span>游戏功能</span>
         </router-link>
-        <router-link to="/tokens" class="drawer-item" @click="isMobileMenuOpen = false">
-          <n-icon><PersonCircle /></n-icon>
+        <router-link
+          to="/tokens"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <PersonCircle />
+          </n-icon>
           <span>Token管理</span>
         </router-link>
-        <router-link to="/changelog" class="drawer-item" @click="isMobileMenuOpen = false">
-          <n-icon><Ribbon /></n-icon>
+        <router-link
+          to="/changelog"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <Ribbon />
+          </n-icon>
           <span>更新日志</span>
         </router-link>
         <div class="drawer-actions">
-          <n-button type="primary" block @click="router.push('/login'); isMobileMenuOpen = false">登录</n-button>
-          <n-button type="primary" block @click="router.push('/register'); isMobileMenuOpen = false">注册</n-button>
+          <n-button
+            type="primary"
+            block
+            @click="
+              router.push('/login');
+              isMobileMenuOpen = false;
+            "
+            >登录</n-button
+          >
+          <n-button
+            type="primary"
+            block
+            @click="
+              router.push('/register');
+              isMobileMenuOpen = false;
+            "
+            >注册</n-button
+          >
         </div>
       </div>
     </n-drawer>
@@ -89,20 +135,22 @@
         <div class="container">
           <div class="hero-content">
             <div class="hero-text">
-              <h1 class="hero-title">
-                专业的游戏管理平台
-              </h1>
-              <p class="hero-subtitle">
-                让游戏变得更简单，让管理变得更高效
-              </p>
+              <h1 class="hero-title">专业的游戏管理平台</h1>
+              <p class="hero-subtitle">让游戏变得更简单，让管理变得更高效</p>
               <div class="hero-actions">
                 <n-button
                   type="primary"
                   size="large"
                   class="hero-button"
-                  @click="router.push(authStore.isAuthenticated ? '/admin/dashboard' : '/register')"
+                  @click="
+                    router.push(
+                      authStore.isAuthenticated
+                        ? '/admin/dashboard'
+                        : '/register',
+                    )
+                  "
                 >
-                  {{ authStore.isAuthenticated ? '进入控制台' : '立即开始' }}
+                  {{ authStore.isAuthenticated ? "进入控制台" : "立即开始" }}
                 </n-button>
                 <n-button
                   text
@@ -138,18 +186,11 @@
       </section>
 
       <!-- 功能特性 -->
-      <section
-        ref="featuresSection"
-        class="features-section"
-      >
+      <section ref="featuresSection" class="features-section">
         <div class="container">
           <div class="section-header">
-            <h2 class="section-title">
-              核心功能
-            </h2>
-            <p class="section-subtitle">
-              为您提供全方位的游戏管理解决方案
-            </p>
+            <h2 class="section-title">核心功能</h2>
+            <p class="section-subtitle">为您提供全方位的游戏管理解决方案</p>
           </div>
 
           <div class="features-grid">
@@ -176,11 +217,7 @@
       <section class="stats-section">
         <div class="container">
           <div class="stats-grid">
-            <div
-              v-for="stat in stats"
-              :key="stat.id"
-              class="stat-item"
-            >
+            <div v-for="stat in stats" :key="stat.id" class="stat-item">
               <div class="stat-number">
                 {{ stat.number }}
               </div>
@@ -198,36 +235,17 @@
       <div class="container">
         <div class="footer-content">
           <div class="footer-brand">
-            <img
-              src="/icons/xiaoyugan.png"
-              alt="XYZW"
-              class="footer-logo"
-            >
+            <img src="/icons/xiaoyugan.png" alt="XYZW" class="footer-logo" />
             <span class="footer-text">XYZW 游戏管理系统</span>
           </div>
           <div class="footer-links">
-            <router-link
-              to="/changelog"
-              class="footer-link"
-            >
+            <router-link to="/changelog" class="footer-link">
               更新日志
             </router-link>
-            <a
-              href="#"
-              class="footer-link"
-            >关于我们</a>
-            <a
-              href="#"
-              class="footer-link"
-            >隐私政策</a>
-            <a
-              href="#"
-              class="footer-link"
-            >服务条款</a>
-            <a
-              href="#"
-              class="footer-link"
-            >联系我们</a>
+            <a href="#" class="footer-link">关于我们</a>
+            <a href="#" class="footer-link">隐私政策</a>
+            <a href="#" class="footer-link">服务条款</a>
+            <a href="#" class="footer-link">联系我们</a>
           </div>
         </div>
         <div class="footer-bottom">
@@ -239,93 +257,87 @@
 </template>
 
 <script setup>
-import { ref, onMounted, markRaw } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import {
-  PersonCircle,
-  Cube,
-  Ribbon,
-  Settings,
-  Menu
-} from '@vicons/ionicons5'
+import { ref, onMounted, markRaw } from "vue";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
+import { PersonCircle, Cube, Ribbon, Settings, Menu } from "@vicons/ionicons5";
 
-const router = useRouter()
-const authStore = useAuthStore()
-const featuresSection = ref(null)
-const isMobileMenuOpen = ref(false)
+const router = useRouter();
+const authStore = useAuthStore();
+const featuresSection = ref(null);
+const isMobileMenuOpen = ref(false);
 
 // 功能卡片数据
 const featureCards = ref([
   {
     id: 1,
     icon: markRaw(PersonCircle),
-    title: '角色管理',
-    description: '统一管理游戏角色'
+    title: "角色管理",
+    description: "统一管理游戏角色",
   },
   {
     id: 2,
     icon: markRaw(Cube),
-    title: '任务系统',
-    description: '自动化日常任务'
+    title: "任务系统",
+    description: "自动化日常任务",
   },
   {
     id: 3,
     icon: markRaw(Ribbon),
-    title: '数据统计',
-    description: '全面的数据分析'
-  }
-])
+    title: "数据统计",
+    description: "全面的数据分析",
+  },
+]);
 
 // 功能特性数据
 const features = ref([
   {
     id: 1,
     icon: markRaw(PersonCircle),
-    title: '角色管理',
-    description: '轻松管理多个游戏角色，统一查看角色信息、等级进度和装备状态'
+    title: "角色管理",
+    description: "轻松管理多个游戏角色，统一查看角色信息、等级进度和装备状态",
   },
   {
     id: 2,
     icon: markRaw(Cube),
-    title: '任务自动化',
-    description: '智能日常任务系统，自动完成重复性任务，节省您的宝贵时间'
+    title: "任务自动化",
+    description: "智能日常任务系统，自动完成重复性任务，节省您的宝贵时间",
   },
   {
     id: 3,
     icon: markRaw(Ribbon),
-    title: '数据分析',
-    description: '详细的数据统计和分析报告，帮助您更好地了解游戏进度'
+    title: "数据分析",
+    description: "详细的数据统计和分析报告，帮助您更好地了解游戏进度",
   },
   {
     id: 4,
     icon: markRaw(Settings),
-    title: '个性化设置',
-    description: '灵活的配置选项，根据您的需求定制最适合的管理方案'
-  }
-])
+    title: "个性化设置",
+    description: "灵活的配置选项，根据您的需求定制最适合的管理方案",
+  },
+]);
 
 // 统计数据
 const stats = ref([
-  { id: 1, number: '1000+', label: '活跃用户' },
-  { id: 2, number: '50K+', label: '管理角色' },
-  { id: 3, number: '100K+', label: '完成任务' },
-  { id: 4, number: '99.9%', label: '系统稳定性' }
-])
+  { id: 1, number: "1000+", label: "活跃用户" },
+  { id: 2, number: "50K+", label: "管理角色" },
+  { id: 3, number: "100K+", label: "完成任务" },
+  { id: 4, number: "99.9%", label: "系统稳定性" },
+]);
 
 // 滚动到功能区域
 const scrollToFeatures = () => {
   if (featuresSection.value) {
     featuresSection.value.scrollIntoView({
-      behavior: 'smooth'
-    })
+      behavior: "smooth",
+    });
   }
-}
+};
 
 onMounted(() => {
   // 初始化认证状态
-  authStore.initAuth()
-})
+  authStore.initAuth();
+});
 </script>
 
 <style scoped lang="scss">
@@ -440,7 +452,11 @@ onMounted(() => {
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
   margin-bottom: var(--spacing-md);
-  background: linear-gradient(45deg, var(--bg-primary), var(--primary-color-light));
+  background: linear-gradient(
+    45deg,
+    var(--bg-primary),
+    var(--primary-color-light)
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -582,6 +598,7 @@ onMounted(() => {
   padding: var(--spacing-2xl) 0;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
+
 /* 深色主题下统计区背景 */
 [data-theme="dark"] .stats-section {
   background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
@@ -691,6 +708,11 @@ onMounted(() => {
   .nav-actions {
     flex-direction: column;
     gap: var(--spacing-xs);
+  }
+
+  .footer-links {
+    flex-direction: column;
+    gap: var(--spacing-md);
   }
 }
 </style>
