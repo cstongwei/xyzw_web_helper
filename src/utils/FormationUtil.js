@@ -64,7 +64,7 @@ export class FormationTool {
       this.log(`检查${formationName}配置...`);
       const currentFormation = await this.getCurrentFormation(tokenId);
 
-      if (currentFormation === targetFormation) {
+      if (String(currentFormation) === String(targetFormation)) {
         this.log(`当前已是${formationName}${targetFormation}，无需切换`, "success");
         return false;
       }

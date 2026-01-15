@@ -331,7 +331,7 @@ export const useTokenStore = defineStore("tokens", () => {
               }
             } else {
               // Bin形式token刷新（原有逻辑）
-              console.log("getArrayBuffer", await getArrayBuffer("小鱼"));
+              // console.log("getArrayBuffer", await getArrayBuffer("小鱼"));
               const userToken: ArrayBuffer | null = await getArrayBuffer(
                 gameToken.name,
               );

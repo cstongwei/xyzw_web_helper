@@ -1014,7 +1014,7 @@ const legion_storebuygoods = async () => {
       // Execute purchase command
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `发送购买请求...`,
+        message: `[${token.name}] 发送购买请求...`,
         type: "info",
       });
       const result = await tokenStore.sendMessageWithPromise(
@@ -1031,20 +1031,20 @@ const legion_storebuygoods = async () => {
         if (result.error.includes("俱乐部商品购买数量超出上限")) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `本周已购买过四圣碎片，跳过`,
+            message: `[${token.name}] 本周已购买过四圣碎片，跳过`,
             type: "info",
           });
         } else if (result.error.includes("物品不存在")) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `盐锭不足或未加入军团，购买失败`,
+            message: `[${token.name}] 盐锭不足或未加入军团，购买失败`,
             type: "error",
           });
           tokenStatus.value[tokenId] = "failed";
         } else {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `购买失败: ${result.error}`,
+            message: `[${token.name}] 购买失败: ${result.error}`,
             type: "error",
           });
           tokenStatus.value[tokenId] = "failed";
@@ -1052,7 +1052,7 @@ const legion_storebuygoods = async () => {
       } else {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `购买成功，获得四圣碎片`,
+          message: `[${token.name}] 购买成功，获得四圣碎片`,
           type: "success",
         });
         tokenStatus.value[tokenId] = "completed";
@@ -1062,7 +1062,7 @@ const legion_storebuygoods = async () => {
     } catch (error) {
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `购买过程出错: ${error.message}`,
+        message: `[${token.name}] 购买过程出错: ${error.message}`,
         type: "error",
       });
       tokenStatus.value[tokenId] = "failed";
@@ -1109,12 +1109,12 @@ const legionStoreBuySkinCoins = async () => {
       // Execute purchase command
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `发送购买请求...`,
+        message: `[${token.name}] 发送购买请求...`,
         type: "info",
       });
-
+      let result ={};
       for (let i = 0; i < 5; i++) {
-        const result = await tokenStore.sendMessageWithPromise(
+          result = await tokenStore.sendMessageWithPromise(
           tokenId,
           "legion_storebuygoods",
           { "id": 1 },
@@ -1129,20 +1129,20 @@ const legionStoreBuySkinCoins = async () => {
         if (result.error.includes("俱乐部商品购买数量超出上限")) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `本周已购买过皮肤币，跳过`,
+            message: `[${token.name}] 本周已购买过皮肤币，跳过`,
             type: "info",
           });
         } else if (result.error.includes("物品不存在")) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `盐锭不足或未加入军团，购买失败`,
+            message: `[${token.name}] 盐锭不足或未加入军团，购买失败`,
             type: "error",
           });
           tokenStatus.value[tokenId] = "failed";
         } else {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `购买失败: ${result.error}`,
+            message: `[${token.name}] 购买失败: ${result.error}`,
             type: "error",
           });
           tokenStatus.value[tokenId] = "failed";
@@ -1150,7 +1150,7 @@ const legionStoreBuySkinCoins = async () => {
       } else {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `购买成功，获得皮肤币`,
+          message: `[${token.name}] 购买成功，获得皮肤币`,
           type: "success",
         });
         tokenStatus.value[tokenId] = "completed";
@@ -1160,7 +1160,7 @@ const legionStoreBuySkinCoins = async () => {
     } catch (error) {
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `购买过程出错: ${error.message}`,
+        message: `[${token.name}] 购买过程出错: ${error.message}`,
         type: "error",
       });
       tokenStatus.value[tokenId] = "failed";
@@ -1202,7 +1202,7 @@ const collection_claimfreereward = async () => {
       // Execute claim free reward command
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `发送珍宝阁免费领取请求...`,
+        message: `[${token.name}] 发送珍宝阁免费领取请求...`,
         type: "info",
       });
       const result = await tokenStore.sendMessageWithPromise(
@@ -1218,14 +1218,14 @@ const collection_claimfreereward = async () => {
       if (result.error) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `珍宝阁领取失败: ${result.error}`,
+          message: `[${token.name}] 珍宝阁领取失败: ${result.error}`,
           type: "error",
         });
         tokenStatus.value[tokenId] = "failed";
       } else {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `珍宝阁领取成功`,
+          message: `[${token.name}] 珍宝阁领取成功`,
           type: "success",
         });
         tokenStatus.value[tokenId] = "completed";
@@ -1235,7 +1235,7 @@ const collection_claimfreereward = async () => {
     } catch (error) {
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `珍宝阁领取过程出错: ${error.message}`,
+        message: `[${token.name}] 珍宝阁领取过程出错: ${error.message}`,
         type: "error",
       });
       tokenStatus.value[tokenId] = "failed";
@@ -1282,7 +1282,7 @@ const store_purchase = async () => {
       // Execute purchase command
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `发送黑市采购请求...`,
+        message: `[${token.name}] 发送黑市采购请求...`,
         type: "info",
       });
       const result = await tokenStore.sendMessageWithPromise(
@@ -1298,14 +1298,14 @@ const store_purchase = async () => {
       if (result.error) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `黑市采购失败: ${result.error}`,
+          message: `[${token.name}] 黑市采购失败: ${result.error}`,
           type: "error",
         });
         tokenStatus.value[tokenId] = "failed";
       } else {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `黑市采购成功`,
+          message: `[${token.name}] 黑市采购成功`,
           type: "success",
         });
         tokenStatus.value[tokenId] = "completed";
@@ -1315,7 +1315,7 @@ const store_purchase = async () => {
     } catch (error) {
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `黑市采购过程出错: ${error.message}`,
+        message: `[${token.name}] 黑市采购过程出错: ${error.message}`,
         type: "error",
       });
       tokenStatus.value[tokenId] = "failed";
@@ -2224,8 +2224,10 @@ const calculateMonthProgress = () => {
 };
 
 const addLog = (log) => {
-
   logs.value.push(log);
+  debugger
+  const method = batchLogger[log.type] || batchLogger.info;
+  method.call(batchLogger, log.message);
   nextTick(() => {
     if (logContainer.value && autoScrollLog.value) {
       logContainer.value.scrollTop = logContainer.value.scrollHeight;
@@ -2388,7 +2390,7 @@ const claimHangUpRewards = async () => {
       // 1. Claim reward
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `领取挂机奖励`,
+        message: `[${token.name}] 领取挂机奖励`,
         type: "info",
       });
       await tokenStore.sendMessageWithPromise(
@@ -2403,7 +2405,7 @@ const claimHangUpRewards = async () => {
       for (let i = 0; i < 4; i++) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `挂机加钟 ${i + 1}/4`,
+          message: `[${token.name}] 挂机加钟 ${i + 1}/4`,
           type: "info",
         });
         await tokenStore.sendMessageWithPromise(
@@ -2426,7 +2428,7 @@ const claimHangUpRewards = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `领取失败: ${error.message}`,
+        message: `[${token.name}] 领取失败: ${error.message}`,
         type: "error",
       });
     }
@@ -2500,7 +2502,7 @@ const batchbaoku13 = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `宝库战斗失败: ${error.message || "未知错误"}`,
+        message: `[${token.name}] 宝库战斗失败: ${error.message || "未知错误"}`,
         type: "error",
       });
     }
@@ -2563,7 +2565,7 @@ const batchbaoku45 = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `宝库战斗失败: ${error.message || "未知错误"}`,
+        message: `[${token.name}] 宝库战斗失败: ${error.message || "未知错误"}`,
         type: "error",
       });
     }
@@ -2795,7 +2797,7 @@ const batcharenafight = async () => {
         if (!targetId) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `未找到可用的竞技场目标: ${error.message || "未知错误"}`,
+            message: `[${token.name}] 未找到可用的竞技场目标`,
             type: "error",
           });
           break;
@@ -2815,7 +2817,7 @@ const batcharenafight = async () => {
         } catch (e) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `竞技场对决失败: ${error.message || "未知错误"}`,
+            message: `[${token.name}] 竞技场对决失败`,
             type: "error",
           });
         }
@@ -2832,7 +2834,7 @@ const batcharenafight = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `竞技场战斗失败: ${error.message || "未知错误"}`,
+        message: `[${token.name}] 竞技场战斗失败: ${error.message || "未知错误"}`,
         type: "error",
       });
     }
@@ -2871,7 +2873,7 @@ const batchAddHangUpTime = async () => {
         if (shouldStop.value) break;
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `执行加钟 ${i + 1}/4`,
+          message: `[${token.name}] 执行加钟 ${i + 1}/4`,
           type: "info",
         });
         await tokenStore.sendMessageWithPromise(
@@ -2893,7 +2895,7 @@ const batchAddHangUpTime = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `加钟失败: ${error.message || "未知错误"}`,
+        message: `[${token.name}] 加钟失败: ${error.message || "未知错误"}`,
         type: "error",
       });
     }
@@ -2917,7 +2919,7 @@ const ensureConnection = async (tokenId) => {
   if (!connected) {
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: `正在连接...`,
+      message: `[${latestToken.name}] 正在连接...`,
       type: "info",
     });
     tokenStore.createWebSocketConnection(
@@ -2931,7 +2933,7 @@ const ensureConnection = async (tokenId) => {
       // First attempt failed
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `连接超时，尝试重连...`,
+        message: `[${latestToken.name}] 连接超时，尝试重连...`,
         type: "warning",
       });
 
@@ -2941,7 +2943,7 @@ const ensureConnection = async (tokenId) => {
 
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `正在重连...`,
+        message: `[${latestToken.name}] 正在重连...`,
         type: "info",
       });
 
@@ -2984,7 +2986,7 @@ const ensureConnection = async (tokenId) => {
   } catch (e) {
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: `初始化数据失败: ${e.message}`,
+      message: `[${latestToken.name}]  初始化数据失败: ${e.message}`,
       type: "warning",
     });
   }
@@ -3025,12 +3027,12 @@ const climbTower = async () => {
       await ensureConnection(tokenId);
       // 切换爬塔阵容
       //获取配置
-      const settings = this.loadSettings(tokenId)
+      const settings = loadSettings(tokenId)
       originFormation = await formationTool.getCurrentFormation(tokenId,
           {
             onLog: (log) => addLog(log)
           });
-      switchFormation = Number(originFormation) !== Number(settings.towerFormation)
+      switchFormation = String(originFormation) !== String(settings.towerFormation)
       if(switchFormation){
         await formationTool.switchFormation(tokenId,
             settings.towerFormation,
@@ -3048,7 +3050,7 @@ const climbTower = async () => {
       let energy = roleInfo?.role?.tower?.energy || 0;
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `初始体力: ${energy}`,
+        message: `[${token.name}] 初始体力: ${energy}`,
         type: "info",
       });
 
@@ -3070,7 +3072,7 @@ const climbTower = async () => {
           consecutiveFailures = 0;
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `爬塔第 ${count} 次`,
+            message: `[${token.name}] 爬塔第 ${count} 次`,
             type: "info",
           });
 
@@ -3092,7 +3094,7 @@ const climbTower = async () => {
           if (err.message && err.message.includes("200400")) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `爬塔次数已用完 (200400)`,
+              message: `[${token.name}] 爬塔次数已用完 (200400)`,
               type: "info",
             });
             break;
@@ -3101,14 +3103,14 @@ const climbTower = async () => {
           consecutiveFailures++;
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `战斗出错: ${err.message} (重试 ${consecutiveFailures}/3)`,
+            message: `[${token.name}] 战斗出错: ${err.message} (重试 ${consecutiveFailures}/3)`,
             type: "warning",
           });
 
-          if (consecutiveFailures >= 3) {
+          if (consecutiveFailures >= 8) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `连续失败次数过多，停止爬塔`,
+              message: `[${token.name}] 连续失败次数过多，停止爬塔`,
               type: "error",
             });
             break;
@@ -3137,7 +3139,7 @@ const climbTower = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `爬塔失败: ${error.message}`,
+        message: `[${token.name}] 爬塔失败: ${error.message}`,
         type: "error",
       });
     }finally {
@@ -3230,13 +3232,13 @@ const batchStudy = async () => {
           if (status.status === "answering") {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `开始答题...`,
+              message: `[${token.name}] 开始答题...`,
               type: "info",
             });
           } else if (status.status === "claiming_rewards") {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `正在领取奖励...`,
+              message: `[${token.name}] 正在领取奖励...`,
               type: "info",
             });
           }
@@ -3267,14 +3269,14 @@ const batchStudy = async () => {
         if (shouldStop.value) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `已停止`,
+            message: `[${token.name}] 答题已停止`,
             type: "warning",
           });
         } else {
           tokenStatus.value[tokenId] = "failed";
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `答题超时或未开始`,
+            message: `[${token.name}] 答题超时或未开始`,
             type: "error",
           });
         }
@@ -3284,7 +3286,7 @@ const batchStudy = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `答题失败: ${error.message}`,
+        message: `[${token.name}] 答题失败: ${error.message}`,
         type: "error",
       });
     }
@@ -3325,7 +3327,7 @@ const batchTopUpFish = async () => {
       // 获取月度任务进度
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `获取月度任务进度...`,
+        message: `[${token.name}] 获取月度任务进度...`,
         type: "info",
       });
       const result = await tokenStore.sendMessageWithPromise(
@@ -3339,7 +3341,7 @@ const batchTopUpFish = async () => {
       if (!act) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `获取月度任务进度失败`,
+          message: `[${token.name}] 获取月度任务进度失败`,
           type: "error",
         });
         tokenStatus.value[tokenId] = "failed";
@@ -3365,13 +3367,13 @@ const batchTopUpFish = async () => {
       const need = Math.max(0, shouldBe - fishNum);
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `当前进度: ${fishNum}/${FISH_TARGET}，需要补齐: ${need}次`,
+        message: `[${token.name}] 当前进度: ${fishNum}/${FISH_TARGET}，需要补齐: ${need}次`,
         type: "info",
       });
       if (need <= 0) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `当前进度已达标，无需补齐`,
+          message: `[${token.name}] 当前进度已达标，无需补齐`,
           type: "success",
         });
         tokenStatus.value[tokenId] = "completed";
@@ -3380,7 +3382,7 @@ const batchTopUpFish = async () => {
       // 执行钓鱼补齐
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `开始执行钓鱼补齐...`,
+        message: `[${token.name}] 开始执行钓鱼补齐...`,
         type: "info",
       });
       // 检查免费次数
@@ -3398,7 +3400,7 @@ const batchTopUpFish = async () => {
       if (isTodayAvailable(lastFreeTime)) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `检测到今日免费钓鱼次数，开始消耗 3 次`,
+          message: `[${token.name}] 检测到今日免费钓鱼次数，开始消耗 3 次`,
           type: "info",
         });
         for (let i = 0; i < 3 && need > freeUsed && !shouldStop.value; i++) {
@@ -3414,7 +3416,7 @@ const batchTopUpFish = async () => {
           } catch (e) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `免费钓鱼失败: ${e.message}`,
+              message: `[${token.name}] 免费钓鱼失败: ${e.message}`,
               type: "error",
             });
             break;
@@ -3437,13 +3439,13 @@ const batchTopUpFish = async () => {
       let remaining = Math.max(0, shouldBe - updatedFishNum);
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `免费次数后进度: ${updatedFishNum}/${FISH_TARGET}，还需补齐: ${remaining}次`,
+        message: `[${token.name}] 免费次数后进度: ${updatedFishNum}/${FISH_TARGET}，还需补齐: ${remaining}次`,
         type: "info",
       });
       if (remaining <= 0) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `已通过免费次数完成目标`,
+          message: `[${token.name}] 已通过免费次数完成目标`,
           type: "success",
         });
         tokenStatus.value[tokenId] = "completed";
@@ -3452,7 +3454,7 @@ const batchTopUpFish = async () => {
       // 付费钓鱼
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `开始付费钓鱼补齐: 共需 ${remaining} 次（每次最多10）`,
+        message: `[${token.name}] 开始付费钓鱼补齐: 共需 ${remaining} 次（每次最多10）`,
         type: "info",
       });
 
@@ -3467,7 +3469,7 @@ const batchTopUpFish = async () => {
           );
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `完成 ${batch} 次付费钓鱼`,
+            message: `[${token.name}] 完成 ${batch} 次付费钓鱼`,
             type: "info",
           });
           remaining -= batch;
@@ -3475,7 +3477,7 @@ const batchTopUpFish = async () => {
         } catch (e) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `付费钓鱼失败: ${e.message}`,
+            message: `[${token.name}] 付费钓鱼失败: ${e.message}`,
             type: "error",
           });
           break;
@@ -3495,13 +3497,13 @@ const batchTopUpFish = async () => {
       if (finalFishNum >= shouldBe || finalFishNum >= FISH_TARGET) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `钓鱼补齐完成，最终进度: ${finalFishNum}/${FISH_TARGET}`,
+          message: `[${token.name}] 钓鱼补齐完成，最终进度: ${finalFishNum}/${FISH_TARGET}`,
           type: "success",
         });
       } else {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `钓鱼补齐已停止，未达到目标，最终进度: ${finalFishNum}/${FISH_TARGET}`,
+          message: `[${token.name}] 钓鱼补齐已停止，未达到目标，最终进度: ${finalFishNum}/${FISH_TARGET}`,
           type: "warning",
         });
       }
@@ -3511,7 +3513,7 @@ const batchTopUpFish = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `钓鱼补齐失败: ${error.message}`,
+        message: `[${token.name}] 钓鱼补齐失败: ${error.message}`,
         type: "error",
       });
     }
@@ -3549,7 +3551,7 @@ const batchTopUpArena = async () => {
       // 获取月度任务进度
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `获取月度任务进度...`,
+        message: `[${token.name}] 获取月度任务进度...`,
         type: "info",
       });
       const result = await tokenStore.sendMessageWithPromise(
@@ -3563,7 +3565,7 @@ const batchTopUpArena = async () => {
       if (!act) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `获取月度任务进度失败`,
+          message: `[${token.name}] 获取月度任务进度失败`,
           type: "error",
         });
         tokenStatus.value[tokenId] = "failed";
@@ -3589,13 +3591,13 @@ const batchTopUpArena = async () => {
       const need = Math.max(0, shouldBe - arenaNum);
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `当前进度: ${arenaNum}/${ARENA_TARGET}，需要补齐: ${need}次`,
+        message: `[${token.name}] 当前进度: ${arenaNum}/${ARENA_TARGET}，需要补齐: ${need}次`,
         type: "info",
       });
       if (need <= 0) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `当前进度已达标，无需补齐`,
+          message: `[${token.name}] 当前进度已达标，无需补齐`,
           type: "success",
         });
         tokenStatus.value[tokenId] = "completed";
@@ -3604,7 +3606,7 @@ const batchTopUpArena = async () => {
       // 执行竞技场补齐
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `开始执行竞技场补齐...`,
+        message: `[${token.name}] 开始执行竞技场补齐...`,
         type: "info",
       });
       // 开始竞技场
@@ -3618,7 +3620,7 @@ const batchTopUpArena = async () => {
       } catch (error) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `开始竞技场失败: ${error.message}`,
+          message: `[${token.name}] 开始竞技场失败: ${error.message}`,
           type: "warning",
         });
         // 继续执行，可能已经在竞技场中
@@ -3635,7 +3637,7 @@ const batchTopUpArena = async () => {
         const planFights = Math.ceil(remaining / 2); // 估计每场战斗可能获得2次进度
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `第${round}轮：计划战斗 ${planFights} 场`,
+          message: `[${token.name}] 第${round}轮：计划战斗 ${planFights} 场`,
           type: "info",
         });
 
@@ -3657,7 +3659,7 @@ const batchTopUpArena = async () => {
           } catch (err) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `获取竞技场目标失败：${err.message}`,
+              message: `[${token.name}] 获取竞技场目标失败：${err.message}`,
               type: "error",
             });
             break;
@@ -3667,7 +3669,7 @@ const batchTopUpArena = async () => {
           if (!targetId) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `未找到可用的竞技场目标`,
+              message: `[${token.name}] 未找到可用的竞技场目标`,
               type: "warning",
             });
             break;
@@ -3682,13 +3684,13 @@ const batchTopUpArena = async () => {
             );
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `竞技场战斗 ${i + 1}/${planFights} 完成`,
+              message: `[${token.name}] 竞技场战斗 ${i + 1}/${planFights} 完成`,
               type: "info",
             });
           } catch (e) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `竞技场对决失败：${e.message}`,
+              message: `[${token.name}] 竞技场对决失败：${e.message}`,
               type: "error",
             });
             // 继续尝试下一场战斗
@@ -3715,7 +3717,7 @@ const batchTopUpArena = async () => {
 
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `第${round}轮后进度: ${updatedArenaNum}/${ARENA_TARGET}，还需补齐: ${remaining}次`,
+          message: `[${token.name}] 第${round}轮后进度: ${updatedArenaNum}/${ARENA_TARGET}，还需补齐: ${remaining}次`,
           type: "info",
         });
 
@@ -3735,19 +3737,19 @@ const batchTopUpArena = async () => {
       if (finalArenaNum >= shouldBe || finalArenaNum >= ARENA_TARGET) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `竞技场补齐完成，最终进度: ${finalArenaNum}/${ARENA_TARGET}`,
+          message: `[${token.name}] 竞技场补齐完成，最终进度: ${finalArenaNum}/${ARENA_TARGET}`,
           type: "success",
         });
       } else if (safetyCounter >= safetyMaxFights) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `达到安全上限，竞技场补齐已停止，最终进度: ${finalArenaNum}/${ARENA_TARGET}`,
+          message: `[${token.name}] 达到安全上限，竞技场补齐已停止，最终进度: ${finalArenaNum}/${ARENA_TARGET}`,
           type: "warning",
         });
       } else {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `竞技场补齐已停止，未达到目标，最终进度: ${finalArenaNum}/${ARENA_TARGET}`,
+          message: `[${token.name}] 竞技场补齐已停止，未达到目标，最终进度: ${finalArenaNum}/${ARENA_TARGET}`,
           type: "warning",
         });
       }
@@ -3757,7 +3759,7 @@ const batchTopUpArena = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `竞技场补齐失败: ${error.message}`,
+        message: `[${token.name}] 竞技场补齐失败: ${error.message}`,
         type: "error",
       });
     }
@@ -3808,27 +3810,36 @@ const gradeLabel = (color) => {
   };
   return map[color] || "未知";
 };
-
-const isBigPrize = (rewards) => {
-  const bigPrizes = [
-    { type: 3, itemId: 3201, value: 10 },
-    { type: 3, itemId: 1001, value: 10 },
-    { type: 3, itemId: 1022, value: 2000 },
-    { type: 2, itemId: 0, value: 2000 },
-    { type: 3, itemId: 1023, value: 5 },
-    { type: 3, itemId: 1022, value: 2500 },
-    { type: 3, itemId: 1001, value: 12 },
-  ];
+/**
+ * 全部大奖
+ **/
+const MINOR_PRIZES = [
+  { type: 3, itemId: 3201, value: 10 },  //万能
+  { type: 3, itemId: 1001, value: 10 },  //招募
+  { type: 3, itemId: 1022, value: 2000 },  //白玉
+  { type: 2, itemId: 0, value: 2000 },
+  { type: 3, itemId: 1023, value: 5 },   //彩玉
+  { type: 3, itemId: 1022, value: 2500 },  //白玉
+  { type: 3, itemId: 1001, value: 12 },  //招募
+];
+/**
+ * 真正高价值大奖
+ */
+const MAJOR_PRIZES = MINOR_PRIZES.filter(p => p.itemId !== 3201);
+const hasPrizeMatching = (rewards, prizeList) => {
   if (!Array.isArray(rewards)) return false;
-  return bigPrizes.some((p) =>
-    rewards.find(
-      (r) =>
-        r.type === p.type &&
-        r.itemId === p.itemId &&
-        Number(r.value || 0) >= p.value,
-    ),
+  return prizeList.some((p) =>
+      rewards.some(
+          (r) =>
+              r.type === p.type &&
+              r.itemId === p.itemId &&
+              Number(r.value || 0) >= p.value,
+      ),
   );
 };
+
+const isMinorPrize = (rewards) => hasPrizeMatching(rewards, MINOR_PRIZES);
+const isMajorPrize = (rewards) => hasPrizeMatching(rewards, MAJOR_PRIZES);
 
 const countRacingRefreshTickets = (rewards) => {
   if (!Array.isArray(rewards)) return 0;
@@ -3839,14 +3850,41 @@ const countRacingRefreshTickets = (rewards) => {
   );
 };
 
-const shouldSendCar = (car, tickets) => {
-  const color = Number(car?.color || 0);
+const shouldSendCar = (car, tickets,token) => {
   const rewards = Array.isArray(car?.rewards) ? car.rewards : [];
-  const racingTickets = countRacingRefreshTickets(rewards);
-  if (tickets >= 6) {
-    return color >= 5 || racingTickets >= 4 || isBigPrize(rewards);
+  if(isMajorPrize(rewards)){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `[${token.name}] 车辆[${gradeLabel(car.color)}]包含高价值大奖，直接发车`,
+      type: "info",
+    });
+    return true
   }
-  return color >= 4 || racingTickets >= 2 || isBigPrize(rewards);
+  if (tickets > 15) return false;
+  if(isMinorPrize(rewards)){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `[${token.name}] 车辆[${gradeLabel(car.color)}]包含大奖，刷新券只剩${tickets}张，直接发车`,
+      type: "info",
+    });
+    return true
+  }
+  const color = Number(car?.color || 0);
+  const racingTickets = countRacingRefreshTickets(rewards);
+  let sendFlag = false;
+  if (tickets >= 6) {
+    sendFlag = color >= 5 || racingTickets >= 4;
+  }else{
+    sendFlag = color >= 4 || racingTickets >= 2
+  }
+  if(sendFlag){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `[${token.name}] 车辆[${gradeLabel(car.color)}]将就发车`,
+      type: "info",
+    });
+  }
+  return sendFlag;
 };
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
@@ -3895,7 +3933,7 @@ const batchSmartSendCar = async () => {
       // 1. Fetch Car Info
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `获取车辆信息...`,
+        message: `[${token.name}] 获取车辆信息...`,
         type: "info",
       });
       const res = await tokenStore.sendMessageWithPromise(
@@ -3919,7 +3957,7 @@ const batchSmartSendCar = async () => {
         refreshTickets = Number(qty || 0);
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `剩余车票: ${refreshTickets}`,
+          message: `[${token.name}] 剩余车票: ${refreshTickets}`,
           type: "info",
         });
       } catch (_) { }
@@ -3931,12 +3969,7 @@ const batchSmartSendCar = async () => {
         if (Number(car.sendAt || 0) !== 0) continue; // Already sent
 
         // Check if we should send immediately
-        if (shouldSendCar(car, refreshTickets)) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `车辆[${gradeLabel(car.color)}]满足条件，直接发车`,
-            type: "info",
-          });
+        if (shouldSendCar(car, refreshTickets,token)) {
           await tokenStore.sendMessageWithPromise(
             tokenId,
             "car_send",
@@ -3961,7 +3994,7 @@ const batchSmartSendCar = async () => {
           // No tickets and not free, just send
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `车辆[${gradeLabel(car.color)}]不满足条件且无刷新次数，直接发车`,
+            message: `[${token.name}] 车辆[${gradeLabel(car.color)}]不满足条件且无刷新次数，直接发车`,
             type: "warning",
           });
           await tokenStore.sendMessageWithPromise(
@@ -3985,7 +4018,7 @@ const batchSmartSendCar = async () => {
 
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `车辆[${gradeLabel(car.color)}]尝试刷新...`,
+            message: `[${token.name}] 车辆[${gradeLabel(car.color)}]尝试刷新...`,
             type: "info",
           });
           const resp = await tokenStore.sendMessageWithPromise(
@@ -4018,12 +4051,7 @@ const batchSmartSendCar = async () => {
           } catch (_) { }
 
           // Check if good enough now
-          if (shouldSendCar(car, refreshTickets)) {
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `刷新后车辆[${gradeLabel(car.color)}]满足条件，发车`,
-              type: "success",
-            });
+          if (shouldSendCar(car, refreshTickets,token)) {
             await tokenStore.sendMessageWithPromise(
               tokenId,
               "car_send",
@@ -4046,7 +4074,7 @@ const batchSmartSendCar = async () => {
           else {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `刷新后车辆[${gradeLabel(car.color)}]仍不满足条件且无刷新次数，发车`,
+              message: `[${token.name}] 刷新后车辆[${gradeLabel(car.color)}]仍不满足条件且无刷新次数，发车`,
               type: "warning",
             });
             await tokenStore.sendMessageWithPromise(
@@ -4079,7 +4107,7 @@ const batchSmartSendCar = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `智能发车失败: ${error.message}`,
+        message: `[${token.name}] 智能发车失败: ${error.message}`,
         type: "error",
       });
     }
@@ -4130,7 +4158,7 @@ const batchClaimCars = async () => {
       // 1. Fetch Car Info
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `获取车辆信息...`,
+        message: `[${token.name}] 获取车辆信息...`,
         type: "info",
       });
       const res = await tokenStore.sendMessageWithPromise(
@@ -4156,7 +4184,7 @@ const batchClaimCars = async () => {
             claimedCount++;
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `收车成功: ${gradeLabel(car.color)}`,
+              message: `[${token.name}] 收车成功: ${gradeLabel(car.color)}`,
               type: "success",
             });
             const roleRes = await tokenStore.sendMessageWithPromise(
@@ -4186,7 +4214,7 @@ const batchClaimCars = async () => {
                 
                 addLog({
                   time: new Date().toLocaleTimeString(),
-                  message: `执行车辆改装升级，当前等级: ${refreshlevel}`,
+                  message: `[${token.name}] 执行车辆改装升级，当前等级: ${refreshlevel}`,
                   type: "success",
                 });
 
@@ -4194,7 +4222,7 @@ const batchClaimCars = async () => {
               } catch (e) {
                 addLog({
                   time: new Date().toLocaleTimeString(),
-                  message: `车辆改装升级失败: ${e.message}`,
+                  message: `[${token.name}] 车辆改装升级失败: ${e.message}`,
                   type: "error",
                 });
                 break; // 升级失败时跳出循环
@@ -4203,7 +4231,7 @@ const batchClaimCars = async () => {
           } catch (e) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `收车失败: ${e.message}`,
+              message: `[${token.name}] 收车失败: ${e.message}`,
               type: "warning",
             });
           }
@@ -4214,7 +4242,7 @@ const batchClaimCars = async () => {
       if (claimedCount === 0) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `没有可收取的车辆`,
+          message: `[${token.name}] 没有可收取的车辆`,
           type: "info",
         });
       }
@@ -4230,7 +4258,7 @@ const batchClaimCars = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `收车失败: ${error.message}`,
+        message: `[${token.name}] 收车失败: ${error.message}`,
         type: "error",
       });
     }
@@ -4308,7 +4336,7 @@ const startBatch = async () => {
         if (retryCount < MAX_RETRIES) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `执行出错: ${error.message}，等待3秒后重试...`,
+            message: `[${token.name}] 执行出错: ${error.message}，等待3秒后重试...`,
             type: "warning",
           });
           // Wait for potential token refresh in store
@@ -4318,7 +4346,7 @@ const startBatch = async () => {
           tokenStatus.value[tokenId] = "failed";
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `执行失败: ${error.message}`,
+            message: `[${token.name}] 执行失败: ${error.message}`,
             type: "error",
           });
         }
@@ -4375,7 +4403,7 @@ const batchClaimBoxPointReward = async () => {
       );
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `宝箱积分领取成功`,
+        message: `[${token.name}] 宝箱积分领取成功`,
         type: "success",
       });
 
@@ -4391,7 +4419,7 @@ const batchClaimBoxPointReward = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `领取失败: ${error.message}`,
+        message: `[${token.name}] 领取失败: ${error.message}`,
         type: "error",
       });
     }
@@ -4445,7 +4473,7 @@ const batchOpenBox = async () => {
       });
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `宝箱类型: ${boxNames[boxType]}, 数量: ${totalCount}`,
+        message: `[${token.name}] 宝箱类型: ${boxNames[boxType]}, 数量: ${totalCount}`,
         type: "info",
       });
 
@@ -4464,7 +4492,7 @@ const batchOpenBox = async () => {
         );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `开箱进度: ${(i + 1) * 10}/${totalCount}`,
+          message: `[${token.name}] 开箱进度: ${(i + 1) * 10}/${totalCount}`,
           type: "info",
         });
         await new Promise((r) => setTimeout(r, 300));
@@ -4479,7 +4507,7 @@ const batchOpenBox = async () => {
         );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `开箱进度: ${totalCount}/${totalCount}`,
+          message: `[${token.name}] 开箱进度: ${totalCount}/${totalCount}`,
           type: "info",
         });
       }
@@ -4500,7 +4528,7 @@ const batchOpenBox = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `开箱失败: ${error.message}`,
+        message: `[${token.name}] 开箱失败: ${error.message}`,
         type: "error",
       });
     }
@@ -4549,7 +4577,7 @@ const batchFish = async () => {
       });
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `鱼竿类型: ${fishNames[fishType]}, 数量: ${totalCount}`,
+        message: `[${token.name}] 鱼竿类型: ${fishNames[fishType]}, 数量: ${totalCount}`,
         type: "info",
       });
 
@@ -4568,7 +4596,7 @@ const batchFish = async () => {
         );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `钓鱼进度: ${(i + 1) * 10}/${totalCount}`,
+          message: `[${token.name}] 钓鱼进度: ${(i + 1) * 10}/${totalCount}`,
           type: "info",
         });
         await new Promise((r) => setTimeout(r, 300));
@@ -4583,7 +4611,7 @@ const batchFish = async () => {
         );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `钓鱼进度: ${totalCount}/${totalCount}`,
+          message: `[${token.name}] 钓鱼进度: ${totalCount}/${totalCount}`,
           type: "info",
         });
       }
@@ -4600,7 +4628,7 @@ const batchFish = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `钓鱼失败: ${error.message}`,
+        message: `[${token.name}] 钓鱼失败: ${error.message}`,
         type: "error",
       });
     }
@@ -4647,7 +4675,7 @@ const batchRecruit = async () => {
       });
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `招募数量: ${totalCount}`,
+        message: `[${token.name}] 招募数量: ${totalCount}`,
         type: "info",
       });
 
@@ -4666,7 +4694,7 @@ const batchRecruit = async () => {
         );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `招募进度: ${(i + 1) * 10}/${totalCount}`,
+          message: `[${token.name}] 招募进度: ${(i + 1) * 10}/${totalCount}`,
           type: "info",
         });
         await new Promise((r) => setTimeout(r, 300));
@@ -4681,7 +4709,7 @@ const batchRecruit = async () => {
         );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `招募进度: ${totalCount}/${totalCount}`,
+          message: `[${token.name}] 招募进度: ${totalCount}/${totalCount}`,
           type: "info",
         });
       }
@@ -4698,7 +4726,7 @@ const batchRecruit = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `招募失败: ${error.message}`,
+        message: `[${token.name}] 招募失败: ${error.message}`,
         type: "error",
       });
     }

@@ -1,4 +1,5 @@
 import { useTokenStore } from "@/stores/tokenStore";
+import {FormationTool} from "@/utils/FormationUtil.js";
 
 // 辅助函数
 const pickArenaTargetId = (targets) => {
@@ -46,6 +47,7 @@ const getTodayBossId = () => {
 export class DailyTaskRunner {
   constructor(tokenStore) {
     this.tokenStore = tokenStore;
+    this.formationTool = new FormationTool(tokenStore);
   }
 
   log(message, type = "info") {
@@ -59,14 +61,14 @@ export class DailyTaskRunner {
   }
 
   async executeGameCommand(
-    tokenId,
+    tokenId,tokenName,
     cmd,
     params = {},
     description = "",
     timeout = 8000,
   ) {
     try {
-      if (description) this.log(`执行: ${description}`);
+      if (description) this.log(`[${tokenName}] 执行: ${description}`);
       const result = await this.tokenStore.sendMessageWithPromise(
         tokenId,
         cmd,
@@ -74,71 +76,12 @@ export class DailyTaskRunner {
         timeout,
       );
       await new Promise((resolve) => setTimeout(resolve, 500));
-      if (description) this.log(`${description} - 成功`, "success");
+      if (description) this.log(`[${tokenName}] ${description} - 成功`, "success");
       return result;
     } catch (error) {
       if (description)
-        this.log(`${description} - 失败: ${error.message}`, "error");
+        this.log(`[${tokenName}] ${description} - 失败: ${error.message}`, "error");
       throw error;
-    }
-  }
-
-  async switchToFormationIfNeeded(tokenId, targetFormation, formationName) {
-    try {
-      // 尝试从本地缓存获取当前阵容信息
-      // 注意：这里直接读取 store 中的 gameData 可能不是最新的，如果是批量跑，建议每次都获取最新的
-      // 或者我们假设 tokenStore.gameData 会随着 sendMessage 更新（如果 store 有处理逻辑）
-      // 安全起见，这里先从服务器获取
-
-      this.log(`检查${formationName}配置...`);
-      const teamInfo = await this.executeGameCommand(
-        tokenId,
-        "presetteam_getinfo",
-        {},
-        "获取阵容信息",
-      );
-
-      if (!teamInfo || !teamInfo.presetTeamInfo) {
-        this.log(`阵容信息异常: ${JSON.stringify(teamInfo)}`, "warning");
-      }
-
-      const currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
-      this.log(`当前阵容: ${currentFormation}`);
-
-      if (currentFormation === targetFormation) {
-        this.log(
-          `当前已是${formationName}${targetFormation}，无需切换`,
-          "success",
-        );
-        return false;
-      }
-
-      this.log(
-        `当前阵容: ${currentFormation}, 目标阵容: ${targetFormation}，开始切换...`,
-      );
-      await this.executeGameCommand(
-        tokenId,
-        "presetteam_saveteam",
-        { teamId: targetFormation },
-        `切换到${formationName}${targetFormation}`,
-      );
-
-      this.log(`成功切换到${formationName}${targetFormation}`, "success");
-      return true;
-    } catch (error) {
-      this.log(`阵容检查失败，尝试强制切换: ${error.message}`, "warning");
-      try {
-        await this.executeGameCommand(
-          tokenId,
-          "presetteam_saveteam",
-          { teamId: targetFormation },
-          `强制切换到${formationName}${targetFormation}`,
-        );
-        return true;
-      } catch (fallbackError) {
-        this.log(`强制切换也失败: ${fallbackError.message}`, "error");
-        throw fallbackError;
-      }
     }
   }
 
@@ -183,13 +126,13 @@ export class DailyTaskRunner {
     if (!roleData) {
       throw new Error("角色数据不存在");
     }
-
+    const tokenName = roleData.name;
     // 重新加载设置，使用正确的 roleId (虽然通常 tokenId 就是 roleId 或者一一对应，但为了保险)
     // 在这个项目中，tokenId 似乎就是 roleId 或者用于标识
     // DailyTaskStatus.vue 中: const role = getCurrentRole() -> roleId: tokenStore.selectedToken.id
     // 所以 tokenId 就是 key
 
-    this.log("开始执行每日任务补差");
+    this.log("["+tokenName+"] 开始执行每日任务补差");
 
     const completedTasks = roleData.dailyTask?.complete ?? {};
     const isTaskCompleted = (taskId) => completedTasks[taskId] === -1;
@@ -204,7 +147,7 @@ export class DailyTaskRunner {
         name: "分享一次游戏",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "system_mysharecallback",
             { isSkipShareCard: true, type: 2 },
             "分享游戏",
@@ -216,7 +159,7 @@ export class DailyTaskRunner {
       taskList.push({
         name: "赠送好友金币",
         execute: () =>
-          this.executeGameCommand(tokenId, "friend_batch", {}, "赠送好友金币"),
+          this.executeGameCommand(tokenId, tokenName,"friend_batch", {}, "赠送好友金币"),
       });
     }
 
@@ -225,7 +168,7 @@ export class DailyTaskRunner {
         name: "免费招募",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "hero_recruit",
             { recruitType: 3, recruitNumber: 1 },
             "免费招募",
@@ -237,7 +180,7 @@ export class DailyTaskRunner {
           name: "付费招募",
           execute: () =>
             this.executeGameCommand(
-              tokenId,
+              tokenId,tokenName,
               "hero_recruit",
               { recruitType: 1, recruitNumber: 1 },
               "付费招募",
@@ -252,7 +195,7 @@ export class DailyTaskRunner {
           name: `免费点金 ${i + 1}/3`,
           execute: () =>
             this.executeGameCommand(
-              tokenId,
+              tokenId,tokenName,
               "system_buygold",
               { buyNum: 1 },
               `免费点金 ${i + 1}`,
@@ -266,7 +209,7 @@ export class DailyTaskRunner {
         name: "领取挂机奖励",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "system_claimhangupreward",
             {},
             "领取挂机奖励",
@@ -277,7 +220,7 @@ export class DailyTaskRunner {
           name: `挂机加钟 ${i + 1}/4`,
           execute: () =>
             this.executeGameCommand(
-              tokenId,
+              tokenId,tokenName,
               "system_mysharecallback",
               { isSkipShareCard: true, type: 2 },
               `挂机加钟 ${i + 1}`,
@@ -291,7 +234,7 @@ export class DailyTaskRunner {
         name: "开启木质宝箱",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "item_openbox",
             { itemId: 2001, number: 10 },
             "开启木质宝箱10个",
@@ -303,7 +246,7 @@ export class DailyTaskRunner {
       name: "停止盐罐计时",
       execute: () =>
         this.executeGameCommand(
-          tokenId,
+          tokenId,tokenName,
           "bottlehelper_stop",
           {},
           "停止盐罐计时",
@@ -313,7 +256,7 @@ export class DailyTaskRunner {
       name: "开始盐罐计时",
       execute: () =>
         this.executeGameCommand(
-          tokenId,
+          tokenId,tokenName,
           "bottlehelper_start",
           {},
           "开始盐罐计时",
@@ -325,55 +268,56 @@ export class DailyTaskRunner {
         name: "领取盐罐奖励",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "bottlehelper_claim",
             {},
             "领取盐罐奖励",
           ),
       });
     }
-
+    const originFormation =await this.formationTool.getCurrentFormation(tokenId,this.callbacks);
     // 2. 竞技场
     if (!isTaskCompleted(13) && settings.arenaEnable) {
       taskList.push({
         name: "竞技场战斗",
         execute: async () => {
-          this.log("开始竞技场战斗流程");
+          this.log( "["+tokenName+"] 开始竞技场战斗流程");
           const hour = new Date().getHours();
           if (hour < 6) {
-            this.log("当前时间未到6点，跳过竞技场战斗", "warning");
+            this.log( "["+tokenName+"] 当前时间未到6点，跳过竞技场战斗", "warning");
             return;
           }
           if (hour > 22) {
-            this.log("当前时间已过22点，跳过竞技场战斗", "warning");
+            this.log( "["+tokenName+"] 当前时间已过22点，跳过竞技场战斗", "warning");
             return;
           }
 
-          await this.switchToFormationIfNeeded(
+          await this.formationTool.switchToFormationIfNeeded(
             tokenId,
             settings.arenaFormation,
             "竞技场阵容",
+              this.callbacks
           );
           await this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "arena_startarea",
             {},
             "开始竞技场",
           );
 
           for (let i = 1; i <= 3; i++) {
-            this.log(`竞技场战斗 ${i}/3`);
+            this.log(`[${tokenName}] 竞技场战斗 ${i}/3`);
             let targets;
             try {
               targets = await this.executeGameCommand(
-                tokenId,
+                tokenId,tokenName,
                 "arena_getareatarget",
                 {},
                 `获取竞技场目标${i}`,
               );
             } catch (err) {
               this.log(
-                `竞技场战斗${i} - 获取对手失败: ${err.message}`,
+                `[${tokenName}] 竞技场战斗${i} - 获取对手失败: ${err.message}`,
                 "error",
               );
               break;
@@ -382,7 +326,7 @@ export class DailyTaskRunner {
             const targetId = pickArenaTargetId(targets);
             if (targetId) {
               await this.executeGameCommand(
-                tokenId,
+                tokenId,tokenName,
                 "fight_startareaarena",
                 { targetId },
                 `竞技场战斗${i}`,
@@ -390,7 +334,7 @@ export class DailyTaskRunner {
               );
             } else {
               this.log(
-                `竞技场战斗${i} - 未找到目标: ${JSON.stringify(targets)}`,
+                `[${tokenName}] 竞技场战斗${i} - 未找到目标: ${JSON.stringify(targets)}`,
                 "warning",
               );
             }
@@ -415,10 +359,11 @@ export class DailyTaskRunner {
         taskList.push({
           name: "军团BOSS阵容检查",
           execute: () =>
-            this.switchToFormationIfNeeded(
+              this.formationTool.switchToFormationIfNeeded(
               tokenId,
               settings.bossFormation,
               "BOSS阵容",
+                  this.callbacks
             ),
         });
         for (let i = 0; i < remainingLegionBoss; i++) {
@@ -426,7 +371,7 @@ export class DailyTaskRunner {
             name: `军团BOSS ${i + 1}/${remainingLegionBoss}`,
             execute: () =>
               this.executeGameCommand(
-                tokenId,
+                tokenId,tokenName,
                 "fight_startlegionboss",
                 {},
                 `军团BOSS ${i + 1}`,
@@ -441,10 +386,11 @@ export class DailyTaskRunner {
     taskList.push({
       name: "每日BOSS阵容检查",
       execute: () =>
-        this.switchToFormationIfNeeded(
+          this.formationTool.switchToFormationIfNeeded(
           tokenId,
           settings.bossFormation,
           "BOSS阵容",
+              this.callbacks
         ),
     });
     for (let i = 0; i < 3; i++) {
@@ -452,7 +398,7 @@ export class DailyTaskRunner {
         name: `每日BOSS ${i + 1}/3`,
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "fight_startboss",
             { bossId: todayBossId },
             `每日BOSS ${i + 1}`,
@@ -487,7 +433,7 @@ export class DailyTaskRunner {
         name: reward.name,
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             reward.cmd,
             reward.params || {},
             reward.name,
@@ -499,7 +445,7 @@ export class DailyTaskRunner {
       name: "开始领取珍宝阁礼包",
       execute: () =>
         this.executeGameCommand(
-          tokenId,
+          tokenId,tokenName,
           "collection_goodslist",
           {},
           "开始领取珍宝阁礼包",
@@ -509,7 +455,7 @@ export class DailyTaskRunner {
       name: "领取珍宝阁免费礼包",
       execute: () =>
         this.executeGameCommand(
-          tokenId,
+          tokenId,tokenName,
           "collection_claimfreereward",
           {},
           "领取珍宝阁免费礼包",
@@ -523,7 +469,7 @@ export class DailyTaskRunner {
           name: `免费钓鱼 ${i + 1}/3`,
           execute: () =>
             this.executeGameCommand(
-              tokenId,
+              tokenId,tokenName,
               "artifact_lottery",
               { lotteryNumber: 1, newFree: true, type: 1 },
               `免费钓鱼 ${i + 1}`,
@@ -539,7 +485,7 @@ export class DailyTaskRunner {
           name: `${kingdoms[gid - 1]}灯神免费扫荡`,
           execute: () =>
             this.executeGameCommand(
-              tokenId,
+              tokenId,tokenName,
               "genie_sweep",
               { genieId: gid },
               `${kingdoms[gid - 1]}灯神免费扫荡`,
@@ -553,7 +499,7 @@ export class DailyTaskRunner {
         name: `领取免费扫荡卷 ${i + 1}/3`,
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "genie_buysweep",
             {},
             `领取免费扫荡卷 ${i + 1}`,
@@ -567,7 +513,7 @@ export class DailyTaskRunner {
         name: "黑市购买1次物品",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "store_purchase",
             { goodsId: 1 },
             "黑市购买1次物品",
@@ -588,7 +534,7 @@ export class DailyTaskRunner {
         name: "咸王梦境",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "dungeon_selecthero",
             { battleTeam: mjbattleTeam },
             "咸王梦境",
@@ -605,7 +551,7 @@ export class DailyTaskRunner {
         name: "深海灯神",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "genie_sweep",
             { genieId: 5, sweepCnt: 1 },
             "深海灯神",
@@ -619,7 +565,7 @@ export class DailyTaskRunner {
         name: `领取任务奖励${taskId}`,
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "task_claimdailypoint",
             { taskId },
             `领取任务奖励${taskId}`,
@@ -633,7 +579,7 @@ export class DailyTaskRunner {
         name: "领取日常任务奖励",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "task_claimdailyreward",
             {},
             "领取日常任务奖励",
@@ -643,7 +589,7 @@ export class DailyTaskRunner {
         name: "领取周常任务奖励",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "task_claimweekreward",
             {},
             "领取周常任务奖励",
@@ -653,7 +599,7 @@ export class DailyTaskRunner {
         name: "领取通行证奖励",
         execute: () =>
           this.executeGameCommand(
-            tokenId,
+            tokenId,tokenName,
             "activity_recyclewarorderrewardclaim",
             { actId: 1 },
             "领取通行证奖励",
@@ -663,7 +609,19 @@ export class DailyTaskRunner {
 
     // 执行
     const totalTasks = taskList.length;
-    this.log(`共有 ${totalTasks} 个任务待执行`);
+    this.log(`[${tokenName}] 共有 ${totalTasks} 个任务待执行`);
+
+    //还原阵容
+    taskList.push({
+      name: "还原阵容",
+      execute: () =>
+          this.formationTool.switchToFormationIfNeeded(
+              tokenId,
+              originFormation,
+              "还原阵容",
+              this.callbacks
+          ),
+    });
 
     for (let i = 0; i < taskList.length; i++) {
       const task = taskList[i];
@@ -673,11 +631,12 @@ export class DailyTaskRunner {
         if (this.callbacks?.onProgress) this.callbacks.onProgress(progress);
         await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
-        this.log(`任务执行失败: ${task.name} - ${error.message}`, "error");
+        this.log(`[${tokenName}] 任务执行失败: ${task.name} - ${error.message}`, "error");
       }
     }
 
     if (this.callbacks?.onProgress) this.callbacks.onProgress(100);
-    this.log("所有任务执行完成", "success");
+
+    this.log(`[${tokenName}] 所有任务执行完成`, "success");
   }
 }
