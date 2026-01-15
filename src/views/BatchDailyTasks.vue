@@ -2225,7 +2225,9 @@ const calculateMonthProgress = () => {
 
 const addLog = (log) => {
   logs.value.push(log);
-  debugger
+  if (logs.value.length > 1200) {
+    logs.value.shift(); // 移除第一条（最早的一条）
+  }
   const method = batchLogger[log.type] || batchLogger.info;
   method.call(batchLogger, log.message);
   nextTick(() => {

@@ -243,13 +243,13 @@ onSome(["fight_starttower", "fight_starttowerresp"], (data: Session) => {
 
   const layer = towerId % 10;
   const rewardFloor = Math.floor(towerId / 10);
-
+  gameLogger.info(`当前正在爬:${rewardFloor}-${layer + 1}层塔`);
   // 如果是新层数的第一层(layer=0)，检查是否有奖励可领取
   if (layer === 0) {
     setTimeout(() => {
       const roleInfo = gameData.value.roleInfo;
       const towerRewards = roleInfo?.role?.tower?.reward;
-
+      gameLogger.info(`检测到有奖励 ${JSON.stringify(towerRewards)}`)
       if (towerRewards && !towerRewards[rewardFloor]) {
         // 保存奖励信息
         gameData.value.towerResult.autoReward = true;
@@ -275,6 +275,7 @@ onSome(["tower_claimreward", "tower_claimrewardresp"], (data: Session) => {
     gameLogger.warn("爬塔战斗开始响应为空");
     return;
   }
+  gameLogger.info(`奖励领取完成`)
   // 奖励领取成功后更新角色信息
   setTimeout(() => {
     client?.send("role_getroleinfo", {});
