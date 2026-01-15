@@ -72,7 +72,7 @@ class Logger {
     return [prefix, message, ...args];
   }
   allowToElectron(message){
-    return EXTERNAL_KEYS.every(key => !message.includes(key)) && message.length > 800;
+    return EXTERNAL_KEYS.every(key => !message.includes(key));
   }
   error(message, ...args) {
     if (this.level >= LOG_LEVELS.ERROR) {
