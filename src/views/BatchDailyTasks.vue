@@ -41,7 +41,7 @@
               ">
               智能发车
             </n-button>
-            <n-button size="small" @click="batchClaimCars" :disabled="isRunning || selectedTokens.length === 0 || !isCarActivityOpen
+            <n-button size="small" @click="doClaimCars" :disabled="isRunning || selectedTokens.length === 0
               ">
               一键收车
             </n-button>
@@ -3898,7 +3898,11 @@ const canClaim = (car) => {
 const batchSmartSendCar = async () => {
   if (selectedTokens.value.length === 0) return;
   if(!isCarActivityOpen.value){
-    batchLogger.warn("今天不需要发车！")
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `今天不需要发车`,
+      type: "warn",
+    });
     return; // 不是周一二三，直接退出，不执行任务
   }
 
@@ -4120,13 +4124,8 @@ const batchSmartSendCar = async () => {
   currentRunningTokenId.value = null;
   message.success("批量智能发车结束");
 };
-
-const batchClaimCars = async () => {
+const doClaimCars = async () => {
   if (selectedTokens.value.length === 0) return;
-  if(!isCarActivityOpen.value){
-    batchLogger.warn("今天不需要发车！")
-    return;
-  }
   isRunning.value = true;
   shouldStop.value = false;
   // 不再重置logs数组，保留之前的日志
@@ -4162,24 +4161,24 @@ const batchClaimCars = async () => {
         type: "info",
       });
       const res = await tokenStore.sendMessageWithPromise(
-        tokenId,
-        "car_getrolecar",
-        {},
-        10000,
+          tokenId,
+          "car_getrolecar",
+          {},
+          10000,
       );
       let carList = normalizeCars(res?.body ?? res);
       let refreshlevel = res?.roleCar?.research?.[1] || 0;
-      
+
       // 2. Claim Cars
       let claimedCount = 0;
       for (const car of carList) {
         if (canClaim(car)) {
           try {
             await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "car_claim",
-              { carId: String(car.id) },
-              10000,
+                tokenId,
+                "car_claim",
+                { carId: String(car.id) },
+                10000,
             );
             claimedCount++;
             addLog({
@@ -4188,30 +4187,30 @@ const batchClaimCars = async () => {
               type: "success",
             });
             const roleRes = await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "role_getroleinfo",
-              {},
-              5000,
+                tokenId,
+                "role_getroleinfo",
+                {},
+                5000,
             );
             let refreshpieces = Number(
-              roleRes?.role?.items?.[35009]?.quantity || 0,
+                roleRes?.role?.items?.[35009]?.quantity || 0,
             );
             while (refreshlevel < CarresearchItem.length && refreshpieces >= CarresearchItem[refreshlevel]) {
               try {
                 await tokenStore.sendMessageWithPromise(tokenId, 'car_research', { researchId: 1 }, 5000);
                 refreshlevel++;
-                
+
                 // 更新refreshpieces数量
                 const updatedRoleRes = await tokenStore.sendMessageWithPromise(
-                  tokenId,
-                  "role_getroleinfo",
-                  {},
-                  5000,
+                    tokenId,
+                    "role_getroleinfo",
+                    {},
+                    5000,
                 );
                 refreshpieces = Number(
-                  updatedRoleRes?.role?.items?.[35009]?.quantity || 0,
+                    updatedRoleRes?.role?.items?.[35009]?.quantity || 0,
                 );
-                
+
                 addLog({
                   time: new Date().toLocaleTimeString(),
                   message: `[${token.name}] 执行车辆改装升级，当前等级: ${refreshlevel}`,
@@ -4270,6 +4269,17 @@ const batchClaimCars = async () => {
   isRunning.value = false;
   currentRunningTokenId.value = null;
   message.success("批量一键收车结束");
+};
+const batchClaimCars = async () => {
+  if(!isCarActivityOpen.value){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `今天不需要收车`,
+      type: "warn",
+    });
+    return;
+  }
+  await doClaimCars();
 };
 
 const startBatch = async () => {
