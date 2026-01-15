@@ -2228,7 +2228,7 @@ const addLog = (log) => {
   if (logs.value.length > 1200) {
     logs.value.shift(); // 移除第一条（最早的一条）
   }
-  console.log(`要输出消息了哦:${log.message}`);
+  // console.log(`要输出消息了哦:${log.message}`);
   if (typeof batchLogger[log.type] === 'function') {
     batchLogger[log.type](log.message);
   } else {

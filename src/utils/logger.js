@@ -15,7 +15,7 @@ export const LOG_LEVELS = {
 
 
 
-const EXTERNAL_KEYS= ["新聊天消息"]
+const EXTERNAL_KEYS= ["新聊天消息","收到未处理事件"]
 
 class Logger {
   constructor(namespace = "APP") {
@@ -29,7 +29,7 @@ class Logger {
   getLogLevel() {
     // 生产环境默认只显示错误和警告
     if (!import.meta.env.DEV) {
-      return LOG_LEVELS.WARN;
+      // return LOG_LEVELS.WARN;
     }
 
     // 开发环境根据localStorage配置决定
