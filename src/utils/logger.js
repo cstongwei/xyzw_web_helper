@@ -13,6 +13,10 @@ export const LOG_LEVELS = {
   VERBOSE: 4, // 详细 - 仅在明确启用时显示
 };
 
+
+
+const EXTERNAL_KEYS= ["新聊天消息"]
+
 class Logger {
   constructor(namespace = "APP") {
     this.namespace = namespace;
@@ -67,14 +71,18 @@ class Logger {
 
     return [prefix, message, ...args];
   }
-
+  allowToElectron(message){
+    return EXTERNAL_KEYS.every(key => !message.includes(key));
+  }
   error(message, ...args) {
     if (this.level >= LOG_LEVELS.ERROR) {
       const formatted = this.formatMessage(LOG_LEVELS.ERROR, message, ...args);
       console.error(...formatted);
       if(this.isElectron){
         const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
-        window.appLogger.error(logStr);
+        if(this.allowToElectron(logStr)){
+          window.appLogger.error(logStr);
+        }
       }
     }
   }
@@ -85,7 +93,9 @@ class Logger {
       console.warn(...formatted);
       if(this.isElectron){
         const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
-        window.appLogger.warn(logStr);
+        if(this.allowToElectron(logStr)){
+          window.appLogger.warn(logStr);
+        }
       }
     }
   }
@@ -96,7 +106,9 @@ class Logger {
       console.info(...formatted);
       if(this.isElectron){
         const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
-        window.appLogger.info(logStr);
+        if(this.allowToElectron(logStr)){
+          window.appLogger.info(logStr);
+        }
       }
     }
   }
@@ -107,7 +119,9 @@ class Logger {
       console.log(...formatted);
       if(this.isElectron){
         const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
-        window.appLogger.log(logStr);
+        if(this.allowToElectron(logStr)){
+          window.appLogger.debug(logStr);
+        }
       }
     }
   }
@@ -118,7 +132,9 @@ class Logger {
       console.log(...formatted);
       if(this.isElectron){
         const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
-        window.appLogger.log(logStr);
+        if(this.allowToElectron(logStr)){
+          window.appLogger.debug(logStr);
+        }
       }
     }
   }

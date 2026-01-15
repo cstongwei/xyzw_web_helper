@@ -2228,8 +2228,12 @@ const addLog = (log) => {
   if (logs.value.length > 1200) {
     logs.value.shift(); // 移除第一条（最早的一条）
   }
-  const method = batchLogger[log.type] || batchLogger.info;
-  method.call(batchLogger, log.message);
+  console.log(`要输出消息了哦:${log.message}`);
+  if (typeof batchLogger[log.type] === 'function') {
+    batchLogger[log.type](log.message);
+  } else {
+    batchLogger.info(log.message);
+  }
   nextTick(() => {
     if (logContainer.value && autoScrollLog.value) {
       logContainer.value.scrollTop = logContainer.value.scrollHeight;
