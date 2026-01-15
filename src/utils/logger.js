@@ -15,7 +15,7 @@ export const LOG_LEVELS = {
 
 
 
-const EXTERNAL_KEYS= ["新聊天消息","收到未处理事件"]
+const EXTERNAL_KEYS= ["新聊天消息","收到未处理事件","[咸将塔] 收到爬塔响应"]
 
 class Logger {
   constructor(namespace = "APP") {
@@ -133,7 +133,7 @@ class Logger {
       if(this.isElectron){
         const logStr = formatted.map(item => this._parseLogArg(item)).join(' ');
         if(this.allowToElectron(logStr)){
-          window.appLogger.debug(logStr);
+          window.appLogger.info(logStr);
         }
       }
     }

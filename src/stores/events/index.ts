@@ -214,6 +214,7 @@ onSome(["fight_starttower", "fight_starttowerresp"], (data: Session) => {
   if (!gameData.value.towerResult) {
     gameData.value.towerResult = {};
   }
+
   if (!body) {
     gameLogger.warn("爬塔战斗开始响应为空");
     return;
@@ -223,7 +224,7 @@ onSome(["fight_starttower", "fight_starttowerresp"], (data: Session) => {
     gameLogger.warn("爬塔战斗数据为空");
     return;
   }
-
+  const tokenName = (battleData && battleData.leftTeam && battleData.leftTeam.name) || "未知";
   // 判断爬塔结果
   const towerId = battleData.options?.towerId;
   const curHP = battleData.result?.sponsor?.ext?.curHP;
@@ -243,13 +244,13 @@ onSome(["fight_starttower", "fight_starttowerresp"], (data: Session) => {
 
   const layer = towerId % 10;
   const rewardFloor = Math.floor(towerId / 10);
-  gameLogger.info(`当前正在爬:${rewardFloor}-${layer + 1}层塔`);
+  gameLogger.info(`${tokenName} 当前正在爬:${rewardFloor}-${layer + 1}层塔`);
   // 如果是新层数的第一层(layer=0)，检查是否有奖励可领取
   if (layer === 0) {
     setTimeout(() => {
       const roleInfo = gameData.value.roleInfo;
       const towerRewards = roleInfo?.role?.tower?.reward;
-      gameLogger.info(`检测到有奖励 ${JSON.stringify(towerRewards)}`)
+      gameLogger.info(`${tokenName} 检测到有奖励 ${JSON.stringify(towerRewards)}`)
       if (towerRewards && !towerRewards[rewardFloor]) {
         // 保存奖励信息
         gameData.value.towerResult.autoReward = true;
