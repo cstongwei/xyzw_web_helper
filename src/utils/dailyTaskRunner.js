@@ -1,5 +1,5 @@
 import { useTokenStore } from "@/stores/tokenStore";
-import {FormationTool} from "@/utils/FormationUtil.js";
+import {FormationTool} from "@/utils/FormationTool.js";
 
 // 辅助函数
 const pickArenaTargetId = (targets) => {

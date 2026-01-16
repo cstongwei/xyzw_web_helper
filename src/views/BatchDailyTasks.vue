@@ -74,6 +74,12 @@
               ">
               一键梦境
             </n-button>
+            <n-button size="small" @click="batchBuyDungeon" :disabled="isRunning ||
+              selectedTokens.length === 0 ||
+              !ismengjingActivityOpen
+              ">
+              梦境购买
+            </n-button>
             <n-button size="small" @click="batchclubsign" :disabled="isRunning || selectedTokens.length === 0">
               一键俱乐部签到
             </n-button>
@@ -198,34 +204,48 @@
 
       <!-- Right Column - Execution Log -->
       <div class="right-column">
-        <n-card :title="currentRunningTokenName
-          ? `正在执行: ${currentRunningTokenName}`
-          : '执行日志'
-          " class="log-card">
-          <template #header-extra>
-            <div class="log-header-controls">
-              <n-checkbox v-model:checked="autoScrollLog" size="small">
-                自动滚动
-              </n-checkbox>
-              <n-button size="small" @click="copyLogs" style="margin-left: 8px">
-                复制日志
-              </n-button>
+        <!-- 日志卡片核心修改：移除:title，自定义头部+新增固定样式 -->
+        <n-card class="log-card">
+          <!-- ✅ 自定义card头部：实现【标题独占一行】在按钮上方，完美满足需求1 -->
+          <template #header>
+            <div class="card-header-wrap">
+              <!-- 第一行：原标题文本 -->
+              <div class="card-title">
+                {{ currentRunningTokenName ? `正在执行: ${currentRunningTokenName}` : '执行日志' }}
+              </div>
+              <!-- 第二行：原操作按钮区 -->
+              <div class="log-header-controls">
+                <n-checkbox v-model:checked="autoScrollLog" size="small">
+                  自动滚动
+                </n-checkbox>
+                <n-button size="small" @click="copyLogs" style="margin-left: 8px">
+                  复制日志
+                </n-button>
+                <n-button size="small" @click="clearLogs" style="margin-left: 8px">
+                  清空日志
+                </n-button>
+              </div>
             </div>
           </template>
+
+          <!-- 进度条：和头部一起固定在上方，永久可见 -->
           <n-progress type="line" :percentage="currentProgress" :indicator-placement="'inside'" processing />
+
+          <!-- ✅ 日志容器：仅这个区域滚动，完美满足需求2 -->
           <div class="log-container" ref="logContainer">
             <div v-for="(log, index) in logs" :key="index" class="log-item" :class="log.type">
-              <span class="log-icon">
-                {{{ error: '❌', success: '✅', warning: '⚠️', info: 'ℹ️', debug: '🔧' }[log.type || 'info']}}
-              </span>
+        <span class="log-icon">
+          {{{ error: '❌', success: '✅', warning: '⚠️', info: 'ℹ️', debug: '🔧' }[log.type || 'info']}}
+        </span>
               <span class="time">{{ log.time }}</span>
               <span class="message"
                     :class="{
-                       'text-red-500': log.type === 'error',
-                       'text-green-500': log.type === 'success',
-                       'text-yellow-500': log.type === 'warning',
-                       'text-blue-500': log.type === 'info',
-                       'text-gray-500': log.type === 'debug'}"
+                'text-red-500': log.type === 'error',
+                'text-green-500': log.type === 'success',
+                'text-yellow-500': log.type === 'warning',
+                'text-blue-500': log.type === 'info',
+                'text-gray-500': log.type === 'debug'
+              }"
               >{{ log.message }}</span>
             </div>
           </div>
@@ -463,7 +483,8 @@ import { Settings } from "@vicons/ionicons5";
 import {batchLogger} from "@/utils/logger.js";
 import getAppEnvironment from "@/utils/envUtil.js";
 import TaskManager from "@/utils/taskManager.js";
-import {FormationTool} from "@/utils/FormationUtil.js";
+import {FormationTool} from "@/utils/FormationTool.js";
+import {DungeonTool} from "@/utils/dungeonTool.js";
 const env = getAppEnvironment();
 batchLogger.info("当前环境:", env.toString());
 // Initialize token store, message service, and task runner
@@ -472,6 +493,7 @@ const message = useMessage();
 const runner = new DailyTaskRunner(tokenStore);
 
 const formationTool = new FormationTool(tokenStore);
+const dungeonTool = new DungeonTool(tokenStore);
 const tokens = computed(() => tokenStore.gameTokens);
 const isCarActivityOpen = computed(() => {
   const day = new Date().getDay();
@@ -484,7 +506,7 @@ const ismengjingActivityOpen = computed(() => {
 });
 const isbaokuActivityOpen = computed(() => {
   const day = new Date().getDay();
-  return day != 1 && day != 2;
+  return day !== 1 && day !== 2;
 });
 const isarenaActivityOpen = computed(() => {
   const hour = new Date().getHours();
@@ -587,6 +609,7 @@ const availableTasks = [
   { label: "一键宝库前3层", value: "batchbaoku13" },
   { label: "一键宝库4,5层", value: "batchbaoku45" },
   { label: "一键梦境", value: "batchmengjing" },
+  { label: "梦境购买", value: "batchBuyDungeon" },
   { label: "一键俱乐部签到", value: "batchclubsign" },
   { label: "一键竞技场战斗3次", value: "batcharenafight" },
   { label: "一键钓鱼补齐", value: "batchTopUpFish" },
@@ -2266,6 +2289,9 @@ const copyLogs = () => {
       message.error("复制日志失败: " + err.message);
     });
 };
+const clearLogs = () => {
+  logs.value = [];
+};
 
 const waitForConnection = async (tokenId, timeout = 2000) => {
   const start = Date.now();
@@ -2585,6 +2611,14 @@ const batchbaoku45 = async () => {
 
 const batchmengjing = async () => {
   if (selectedTokens.value.length === 0) return;
+  if(!ismengjingActivityOpen.value){
+    addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[一键梦境] 梦境活动未开启`,
+        type: "error",
+      });
+    return;
+  }
   isRunning.value = true;
   shouldStop.value = false;
   // 不再重置logs数组，保留之前的日志
@@ -2602,40 +2636,25 @@ const batchmengjing = async () => {
     try {
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `=== 开始一键宝库: ${token.name} ===`,
+        message: `=== 开始一键梦境: ${token.name} ===`,
         type: "info",
       });
       await ensureConnection(tokenId);
       if (shouldStop.value) break;
       const mjbattleTeam = { 0: 107 };
-      const dayOfWeek = new Date().getDay();
-      if (
-        (dayOfWeek === 0) ||
-        (dayOfWeek === 1) ||
-        (dayOfWeek === 3) ||
-        (dayOfWeek === 4)
-      ) {
-        await tokenStore.sendMessageWithPromise(
+      await tokenStore.sendMessageWithPromise(
           tokenId,
           "dungeon_selecthero",
           { battleTeam: mjbattleTeam },
           5000,
-        );
-        await new Promise((r) => setTimeout(r, 500));
-        tokenStatus.value[tokenId] = "completed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 咸王梦境已完成 ===`,
-          type: "success",
-        });
-      } else {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 当前未在开放时间 ===`,
-          type: "error",
-        });
-        break;
-      }
+      );
+      await new Promise((r) => setTimeout(r, 500));
+      tokenStatus.value[tokenId] = "completed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 咸王梦境已完成 ===`,
+        type: "success",
+      });
     } catch (error) {
       console.error(error);
       tokenStatus.value[tokenId] = "failed";
@@ -2911,6 +2930,63 @@ const batchAddHangUpTime = async () => {
   isRunning.value = false;
   currentRunningTokenId.value = null;
   message.success("批量加钟结束");
+};
+
+/**
+ * 批量购买梦境
+ */
+const batchBuyDungeon = async () => {
+  if (selectedTokens.value.length === 0) return;
+  isRunning.value = true;
+  shouldStop.value = false;
+  selectedTokens.value.forEach((id) => {
+    tokenStatus.value[id] = "waiting";
+  });
+  for (const tokenId of selectedTokens.value) {
+    if (shouldStop.value) break;
+    currentRunningTokenId.value = tokenId;
+    tokenStatus.value[tokenId] = "running";
+    currentProgress.value = 0;
+    const token = tokens.value.find((t) => t.id === tokenId);
+    try {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 开始一键购买梦境: ${token.name} ===`,
+        type: "info",
+      });
+      await ensureConnection(tokenId);
+      if (shouldStop.value) break;
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 执行购买梦境金币商品和高级金杆子`,
+        type: "info",
+      });
+      await dungeonTool.buyAllGoldFishItems(token,
+          {
+            onLog: (log) => addLog(log)
+          }
+      );
+      tokenStatus.value[tokenId] = "completed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 购买梦境商品完成 ===`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error(error);
+      tokenStatus.value[tokenId] = "failed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 购买梦境商品失败: ${error.message || "未知错误"}`,
+        type: "error",
+      });
+    }
+    currentProgress.value = 100;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  isRunning.value = false;
+  currentRunningTokenId.value = null;
+  message.success("批量购买梦境商品结束");
 };
 
 const ensureConnection = async (tokenId) => {
@@ -4758,6 +4834,16 @@ const batchRecruit = async () => {
 
 const batchClaimFreeEnergy = async () => {
   if (selectedTokens.value.length === 0) return;
+
+  if(!isWeirdTowerActivityOpen.value){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `怪异塔不开放`,
+      type: "warn",
+    });
+    return
+  }
+
   isRunning.value = true;
   shouldStop.value = false;
 
@@ -4887,7 +4973,8 @@ const stopBatch = () => {
 }
 
 .log-card {
-  height: 100%;
+  height: calc(100vh - 120px); /* 卡片高度，可根据你的页面调整数值，适配性最强 */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -4898,7 +4985,15 @@ const stopBatch = () => {
   flex-direction: column;
   overflow: hidden;
 }
-
+.card-header-wrap {
+  width: 100%;
+}
+.card-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
 .log-header-controls {
   display: flex;
   align-items: center;
@@ -4915,12 +5010,21 @@ const stopBatch = () => {
   font-family: monospace;
   min-height: 200px;
 }
-
+.n-progress {
+  margin: 10px 0;
+}
+/**
 .log-item {
   margin-bottom: 4px;
   font-size: 12px;
+}*/
+.log-item {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+  line-height: 1.5;
+  font-size: 14px;
 }
-
 .log-item.error {
   color: #d03050;
 }
@@ -4936,12 +5040,18 @@ const stopBatch = () => {
 .log-item.info {
   color: #333;
 }
-
+.log-icon {
+  margin-right: 6px;
+}
 .time {
   color: #999;
   margin-right: 8px;
+  font-size: 12px;
 }
-
+.message {
+  flex: 1;
+  font-size: 12px;
+}
 .token-row {
   display: flex;
   align-items: center;
