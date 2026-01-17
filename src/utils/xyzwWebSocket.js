@@ -260,8 +260,11 @@ export function registerDefaultCommands(reg) {
     .register("bosstower_getinfo")
     .register("bosstower_startboss")
     .register("bosstower_startbox")
-    .register("discount_getdiscountinfo");
+    .register("discount_getdiscountinfo")
 
+    // 功法探索相关
+    .register("legacy_beginhangup")
+    .register("legacy_claimhangup");
   registry.commands.set(
     "fight_startareaarena",
     (ack = 0, seq = 0, params = {}) => {

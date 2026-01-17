@@ -112,6 +112,14 @@
               :disabled="isRunning || selectedTokens.length === 0">
               免费领取珍宝阁
             </n-button>
+            <n-button size="small" @click="legacy_beginhangup"
+                      :disabled="isRunning || selectedTokens.length === 0">
+              探索功法
+            </n-button>
+            <n-button size="small" @click="legacy_claimhangup"
+                      :disabled="isRunning || selectedTokens.length === 0">
+              收取残卷
+            </n-button>
           </n-space>
           <n-space vertical>
             <n-checkbox :checked="isAllSelected" :indeterminate="isIndeterminate" @update:checked="handleSelectAll">
@@ -618,6 +626,8 @@ const availableTasks = [
   { label: "一键购买四圣碎片", value: "legion_storebuygoods" },
   { label: "一键黑市采购", value: "store_purchase" },
   { label: "免费领取珍宝阁", value: "collection_claimfreereward" },
+  { label: "探索功法", value: "legacy_beginhangup" },
+  { label: "收取残卷", value: "legacy_claimhangup" },
 ];
 
 const CarresearchItem = [
@@ -1184,6 +1194,154 @@ const legionStoreBuySkinCoins = async () => {
       addLog({
         time: new Date().toLocaleTimeString(),
         message: `[${token.name}] 购买过程出错: ${error.message}`,
+        type: "error",
+      });
+      tokenStatus.value[tokenId] = "failed";
+    } finally {
+      await new Promise((r) => setTimeout(r, 1000)); // Add a small delay between accounts
+    }
+  }
+
+  currentRunningTokenId.value = null;
+  isRunning.value = false;
+  shouldStop.value = false;
+};
+
+const legacy_beginhangup = async () => {
+  if (selectedTokens.value.length === 0) return;
+  isRunning.value = true;
+  shouldStop.value = false;
+  selectedTokens.value.forEach((id) => { tokenStatus.value[id] = "waiting"; });
+
+  for (const tokenId of selectedTokens.value) {
+    if (shouldStop.value) break;
+
+    currentRunningTokenId.value = tokenId;
+    tokenStatus.value[tokenId] = "running";
+    currentProgress.value = 0;
+
+    const token = tokens.value.find((t) => t.id === tokenId);
+
+    try {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 开始探索功法残券: ${token.name} ===`,
+        type: "info",
+      });
+
+      await ensureConnection(tokenId);
+
+      // Execute claim free reward command
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 发送探索功法残券请求...`,
+        type: "info",
+      });
+      const result = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          "legacy_beginhangup",
+          {}, // Empty body as specified in the JSON template
+          5000,
+      );
+
+      await new Promise((r) => setTimeout(r, 500));
+
+      // Handle result
+      if (result.error) {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `[${token.name}] 探索功法残券失败: ${result.error}`,
+          type: "error",
+        });
+        tokenStatus.value[tokenId] = "failed";
+      } else {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `[${token.name}] 探索功法残券成功`,
+          type: "success",
+        });
+        tokenStatus.value[tokenId] = "completed";
+      }
+
+      currentProgress.value = 100;
+    } catch (error) {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 探索功法残券过程出错: ${error.message}`,
+        type: "error",
+      });
+      tokenStatus.value[tokenId] = "failed";
+    } finally {
+      await new Promise((r) => setTimeout(r, 1000)); // Add a small delay between accounts
+    }
+  }
+
+  currentRunningTokenId.value = null;
+  isRunning.value = false;
+  shouldStop.value = false;
+};
+
+const legacy_claimhangup = async () => {
+  if (selectedTokens.value.length === 0) return;
+  isRunning.value = true;
+  shouldStop.value = false;
+  selectedTokens.value.forEach((id) => { tokenStatus.value[id] = "waiting"; });
+
+  for (const tokenId of selectedTokens.value) {
+    if (shouldStop.value) break;
+
+    currentRunningTokenId.value = tokenId;
+    tokenStatus.value[tokenId] = "running";
+    currentProgress.value = 0;
+
+    const token = tokens.value.find((t) => t.id === tokenId);
+
+    try {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 开始收取功法残券: ${token.name} ===`,
+        type: "info",
+      });
+
+      await ensureConnection(tokenId);
+
+      // Execute claim free reward command
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 发送收取功法残券请求...`,
+        type: "info",
+      });
+      const result = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          "legacy_claimhangup",
+          {}, // Empty body as specified in the JSON template
+          5000,
+      );
+
+      await new Promise((r) => setTimeout(r, 500));
+
+      // Handle result
+      if (result.error) {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `[${token.name}] 收取功法残券失败: ${result.error}`,
+          type: "error",
+        });
+        tokenStatus.value[tokenId] = "failed";
+      } else {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `[${token.name}] 收取功法残券成功`,
+          type: "success",
+        });
+        tokenStatus.value[tokenId] = "completed";
+      }
+
+      currentProgress.value = 100;
+    } catch (error) {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 收取功法残券过程出错: ${error.message}`,
         type: "error",
       });
       tokenStatus.value[tokenId] = "failed";
