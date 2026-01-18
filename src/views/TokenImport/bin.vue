@@ -161,7 +161,11 @@ const uploadBin = (binFile: File) => {
       const userToken = e.target?.result as ArrayBuffer;
       // console.log('转换Token:', userToken);
       const roleToken = await transformToken(userToken);
-      const roleName = roleMeta.roleName || binFile.name.split(".")?.[0] || "";
+      // const roleName = roleMeta.roleName || binFile.name.split(".")?.[0] || "";
+      const { server, roleIndex: metaRoleIndex, roleName: metaRoleName } = roleMeta;
+      const serverPart = metaRoleIndex ? `${server}.${metaRoleIndex}` : server
+      // 拼接最终格式
+      const roleName =  `[${serverPart}]${metaRoleName}`
       // 刷新indexDB数据库token数据
       storeArrayBuffer(roleName, userToken);
       // 上传列表中发现已存在的重复名称，提示消息
