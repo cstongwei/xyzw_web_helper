@@ -41,7 +41,7 @@
               ">
               智能发车
             </n-button>
-            <n-button size="small" @click="doClaimCars" :disabled="isRunning || selectedTokens.length === 0
+            <n-button size="small" @click="batchClaimCars" :disabled="isRunning || selectedTokens.length === 0
               ">
               一键收车
             </n-button>
@@ -3657,7 +3657,7 @@ const batchSmartSendCar = async () => {
         10000,
       );
       let carList = normalizeCars(res?.body ?? res);
-
+      await new Promise((r) => setTimeout(r, 500));
       // 2. Fetch Tickets
       let refreshTickets = 0;
       try {
@@ -3675,7 +3675,7 @@ const batchSmartSendCar = async () => {
           type: "info",
         });
       } catch (_) { }
-
+      await new Promise((r) => setTimeout(r, 400));
       // 3. Process Cars
       for (const car of carList) {
         if (shouldStop.value) break;
@@ -3750,7 +3750,7 @@ const batchSmartSendCar = async () => {
               car.refreshCount = Number(data.refreshCount);
             if (data.rewards != null) car.rewards = data.rewards;
           }
-
+          await new Promise((r) => setTimeout(r, 500));
           // Update tickets
           try {
             const roleRes = await tokenStore.sendMessageWithPromise(
@@ -3766,6 +3766,7 @@ const batchSmartSendCar = async () => {
 
           // Check if good enough now
           if (shouldSendCar(car, refreshTickets,token)) {
+            await new Promise((r) => setTimeout(r, 500));
             await tokenStore.sendMessageWithPromise(
               tokenId,
               "car_send",
@@ -3834,8 +3835,16 @@ const batchSmartSendCar = async () => {
   currentRunningTokenId.value = null;
   message.success("批量智能发车结束");
 };
-const doClaimCars = async () => {
+const batchClaimCars= async () => {
   if (selectedTokens.value.length === 0) return;
+  if(!isCarActivityOpen.value){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `今天不需要收车`,
+      type: "warn",
+    });
+    return;
+  }
   isRunning.value = true;
   shouldStop.value = false;
   // 不再重置logs数组，保留之前的日志
@@ -3896,6 +3905,7 @@ const doClaimCars = async () => {
               message: `[${token.name}] 收车成功: ${gradeLabel(car.color)}`,
               type: "success",
             });
+            await new Promise((r) => setTimeout(r, 500));
             const roleRes = await tokenStore.sendMessageWithPromise(
                 tokenId,
                 "role_getroleinfo",
@@ -3905,6 +3915,7 @@ const doClaimCars = async () => {
             let refreshpieces = Number(
                 roleRes?.role?.items?.[35009]?.quantity || 0,
             );
+            await new Promise((r) => setTimeout(r, 500));
             while (refreshlevel < CarresearchItem.length && refreshpieces >= CarresearchItem[refreshlevel]) {
               try {
                 await tokenStore.sendMessageWithPromise(tokenId, 'car_research', { researchId: 1 }, 5000);
@@ -3979,17 +3990,6 @@ const doClaimCars = async () => {
   isRunning.value = false;
   currentRunningTokenId.value = null;
   message.success("批量一键收车结束");
-};
-const batchClaimCars = async () => {
-  if(!isCarActivityOpen.value){
-    addLog({
-      time: new Date().toLocaleTimeString(),
-      message: `今天不需要收车`,
-      type: "warn",
-    });
-    return;
-  }
-  await doClaimCars();
 };
 
 const startBatch = async () => {
