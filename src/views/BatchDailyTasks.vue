@@ -2589,7 +2589,7 @@ const batchBuyDungeon = async () => {
         message: `[${token.name}] 执行购买梦境金币商品和高级金杆子`,
         type: "info",
       });
-      await dungeonTool.buyAllGoldAndFishItems(token,
+      await dungeonTool.buyAllNeedItems(token,
           {
             onLog: (log) => addLog(log)
           }
