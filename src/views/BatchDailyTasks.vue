@@ -1246,7 +1246,7 @@ const upgradeAboutHero = async (cmd, bizName = "英雄升星") => {
     ...Array.from({ length: 28 }, (_, i) => 201 + i),
     ...Array.from({ length: 14 }, (_, i) => 301 + i),
   ];
-
+  addLog({ time: new Date().toLocaleTimeString(), message: `开始执行[${bizName}]...`, type: "info" });
   for (const heroId of heroIds) {
     await handleTokenSingleCmdTask({
       bizName,
@@ -1258,12 +1258,34 @@ const upgradeAboutHero = async (cmd, bizName = "英雄升星") => {
       loopCount: 10,
     });
   }
-  addLog({ time: new Date().toLocaleTimeString(), message: `[${bizName}完成`, type: "success" })
+  addLog({ time: new Date().toLocaleTimeString(), message: `[${bizName}]完成`, type: "success" });
 };
 //升星
-const heroUpgrade = () => upgradeAboutHero("hero_heroupgradestar", "英雄升星");
+const heroUpgrade = async () => {
+  await upgradeAboutHero("hero_heroupgradestar", "英雄升星");
+};
 //升图鉴
-const heroBookUpgrade = () => upgradeAboutHero("book_upgrade", "英雄图鉴升星");
+const heroBookUpgrade = async () => {
+  await upgradeAboutHero("book_upgrade", "英雄图鉴升星");
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: "开始[领取图鉴奖励]...",
+    type: "info"
+  });
+  await handleTokenSingleCmdTask({
+    bizName: "领取图鉴奖励",
+    cmd:"book_claimpointreward",
+    cmdTimeout: 5000,
+    tokenDelay: 1000,
+    cmdInterval: 500,
+    loopCount: 10,
+  });
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: "[领取图鉴奖励]完成",
+    type: "success"
+  });
+}
 
 const legacy_beginhangup = async () => {
   await handleTokenSingleCmdTask({
