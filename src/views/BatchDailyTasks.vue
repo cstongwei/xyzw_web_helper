@@ -2191,11 +2191,11 @@ const getStatusType = (tokenId) => {
 const isTokenExpiringSoon = (token) => {
   if (!token.expiryDate) return false;
   const expiryDate = new Date(token.expiryDate);
-  const now = new Date();
+  const now = new Date(currentTime.value);
   const fiveDaysLater = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
   const five = expiryDate <= fiveDaysLater
   const notExpire = expiryDate > now
-  return  five && notExpire;
+  return five && notExpire;
 };
 const getStatusText = (tokenId) => {
   const status = tokenStatus.value[tokenId];
