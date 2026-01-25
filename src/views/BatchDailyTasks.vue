@@ -137,9 +137,11 @@
               <n-grid :x-gap="12" :y-gap="8" :cols="2">
                 <n-grid-item v-for="token in tokens" :key="token.id">
                   <div class="token-row">
-                    <n-checkbox :value="token.id" :label="token.name" style="flex: 1">
+                    <n-checkbox :value="token.id" style="flex: 1">
                       <div class="token-item">
-                        <span>{{ token.name }}</span>
+                          <span
+                              :style="{ color: isTokenExpiringSoon(token) ? '#faad14' : 'inherit' }"
+                          >{{ token.name }}</span>
                         <n-tag size="small" :type="getStatusType(token.id)" style="margin-left: 8px">
                           {{ getStatusText(token.id) }}
                         </n-tag>
@@ -2186,7 +2188,15 @@ const getStatusType = (tokenId) => {
   if (status === "running") return "info";
   return "default";
 };
-
+const isTokenExpiringSoon = (token) => {
+  if (!token.expiryDate) return false;
+  const expiryDate = new Date(token.expiryDate);
+  const now = new Date();
+  const fiveDaysLater = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+  const five = expiryDate <= fiveDaysLater
+  const notExpire = expiryDate > now
+  return  five && notExpire;
+};
 const getStatusText = (tokenId) => {
   const status = tokenStatus.value[tokenId];
   if (status === "completed") return "已完成";
