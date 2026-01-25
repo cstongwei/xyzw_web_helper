@@ -510,7 +510,21 @@ const runner = new DailyTaskRunner(tokenStore);
 
 const formationTool = new FormationTool(tokenStore);
 const dungeonTool = new DungeonTool(tokenStore);
-const tokens = computed(() => tokenStore.gameTokens);
+// const tokens = computed(() => tokenStore.gameTokens);
+
+// 添加一个响应式时间戳，用于触发过期检查
+const currentTime = ref(Date.now());
+// 定时更新时间戳（每60秒检查一次过期）
+let timeUpdateInterval;
+const tokens = computed(() => {
+  const now = new Date(currentTime.value);
+  return tokenStore.gameTokens.filter(token => {
+    // 不过滤没有过期时间的token
+    if (!token.expiryDate) return true;
+    // console.log("token.expiryDate:", new Date(token.expiryDate).toLocaleString("zh-CN"),now.toLocaleString("zh-CN"));
+    return new Date(token.expiryDate) > now;
+  });
+});
 const isCarActivityOpen = computed(() => {
   const day = new Date().getDay();
   // 1=Mon, 2=Tue, 3=Wed
@@ -1072,7 +1086,6 @@ const handleTokenMuiltCmdTask = async ({
       tokenStatus.value[tokenId] = "failed";
       continue;
     }
-
     let hasError = false;
     let errorMsg = "";
 
@@ -1566,6 +1579,9 @@ watch(
 
 // Debug: Log initial state when component mounts
 onMounted(() => {
+  timeUpdateInterval = setInterval(() => {
+    currentTime.value = Date.now();
+  }, 60 * 1000); // 每60秒更新一次
   // Initialize scheduled tasks from localStorage
   loadScheduledTasks();
   batchLogger.info(
@@ -1616,7 +1632,9 @@ onBeforeUnmount(() => {
     clearInterval(countdownInterval);
     countdownInterval = null;
   }
-
+  if (timeUpdateInterval) {
+    clearInterval(timeUpdateInterval);
+  }
   addLog({
     time: new Date().toLocaleTimeString(),
     message: "=== 定时任务调度服务已停止 ===",

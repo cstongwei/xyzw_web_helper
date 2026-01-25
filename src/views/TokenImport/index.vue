@@ -143,6 +143,11 @@
                     formatTime(token.lastUsed)
                   }}</span>
                 </div>
+
+                <div class="timestamp-item">
+                  <span class="timestamp-label">有效期：</span>
+                  <span class="timestamp-value">{{ token.expiryDate ? formatTime(token.expiryDate) : '永久' }}</span>
+                </div>
               </div>
 
               <!-- 存储类型信息 -->
@@ -269,6 +274,14 @@
         <n-form-item label="WebSocket地址">
           <n-input v-model:value="editForm.wsUrl" />
         </n-form-item>
+        <n-form-item label="有效期">
+          <n-date-picker
+              v-model:value="editForm.expiryDate"
+              type="datetime"
+              placeholder="选择有效期"
+              clearable
+          />
+        </n-form-item>
       </n-form>
 
       <template #footer>
@@ -367,6 +380,7 @@ const editForm = reactive({
   token: "",
   server: "",
   wsUrl: "",
+  expiryDate: null
 });
 
 const editRules = {
@@ -657,6 +671,7 @@ const editToken = (token) => {
     token: token.token,
     server: token.server || "",
     wsUrl: token.wsUrl || "",
+    expiryDate: token.expiryDate ? new Date(token.expiryDate) : null
   });
   showEditModal.value = true;
 };
@@ -666,12 +681,14 @@ const saveEdit = async () => {
 
   try {
     await editFormRef.value.validate();
-
+    const expiryDate = editForm.expiryDate ? new Date(editForm.expiryDate).getTime() : null
+    console.log(editForm.expiryDate,expiryDate)
     tokenStore.updateToken(editingToken.value.id, {
       name: editForm.name,
       token: editForm.token,
       server: editForm.server,
       wsUrl: editForm.wsUrl,
+      expiryDate: expiryDate
     });
 
     message.success("Token信息已更新");
@@ -679,6 +696,7 @@ const saveEdit = async () => {
     editingToken.value = null;
   } catch (error) {
     // 验证失败
+    console.error(error)
   }
 };
 
