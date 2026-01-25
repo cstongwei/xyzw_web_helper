@@ -3524,32 +3524,57 @@ const gradeLabel = (color) => {
  * 全部大奖
  **/
 const MINOR_PRIZES = [
-  { type: 3, itemId: 3201, value: 10 },  //万能
-  { type: 3, itemId: 1001, value: 10 },  //招募
-  { type: 3, itemId: 1022, value: 2000 },  //白玉
-  { type: 2, itemId: 0, value: 2000 },
-  { type: 3, itemId: 1023, value: 5 },   //彩玉
-  { type: 3, itemId: 1022, value: 2500 },  //白玉
-  { type: 3, itemId: 1001, value: 12 },  //招募
+  { type: 3, itemId: 3201, itemName: '万能红将碎片', value: 10 ,minorCount:1,majorCount: 1},  //万能
+  { type: 3, itemId: 1001, itemName: '招募令',value: 10 ,minorCount:1,majorCount: 1},  //招募
+  { type: 3, itemId: 1022, itemName: '白玉',value: 2000 ,minorCount:1,majorCount:1},  //白玉
+  { type: 2, itemId: 0, itemName: '金砖',value: 2000 ,minorCount:1,majorCount: 1},    //金砖
+  { type: 3, itemId: 1023, itemName: '彩玉',value: 5 ,minorCount:1,majorCount: 1},   //彩玉
+  { type: 3, itemId: 1022, itemName: '白玉',value: 2500 ,minorCount:1,majorCount: 1},  //白玉
+  { type: 3, itemId: 1001, itemName: '招募令',value: 12 ,minorCount:1,majorCount: 1},  //招募
+  { type: 3, itemId: 35002, itemName: '赛车刷新券',value: 2,minorCount:2,majorCount: 3 },  //赛车刷新券
 ];
 /**
  * 真正高价值大奖
  */
 const MAJOR_PRIZES = MINOR_PRIZES.filter(p => p.itemId !== 3201);
-const hasPrizeMatching = (rewards, prizeList) => {
-  if (!Array.isArray(rewards)) return false;
-  return prizeList.some((p) =>
-      rewards.some(
-          (r) =>
-              r.type === p.type &&
-              r.itemId === p.itemId &&
-              Number(r.value || 0) >= p.value,
-      ),
-  );
-};
+/**
+ * 通用奖品匹配校验函数（完全遍历，无硬编码，适配所有奖品）
+ * @param {Array} rewards - 待检查的奖品列表
+ * @param {Array} prizeList - 目标奖品配置列表（MINOR_PRIZES/MAJOR_PRIZES）
+ * @param {string} countField - 要校验的数量阈值字段（"minorCount"/"majorCount"）
+ * @returns {boolean} 是否有任意奖品满足「数量≥阈值」的条件
+ */
+const hasPrizeMatching = (token,rewards, prizeList, countField) => {
+  // 非数组直接返回false
+  if (!Array.isArray(rewards) || !Array.isArray(prizeList)) return false;
 
-const isMinorPrize = (rewards) => hasPrizeMatching(rewards, MINOR_PRIZES);
-const isMajorPrize = (rewards) => hasPrizeMatching(rewards, MAJOR_PRIZES);
+  // 遍历所有目标奖品配置，只要有一个满足条件就返回true
+  return prizeList.some((prizeConfig) => {
+    // 1. 统计rewards中符合「基础匹配条件」的奖品数量
+    const matchedRewardCount = rewards.filter((r) =>
+        r.type === prizeConfig.type &&
+        r.itemId === prizeConfig.itemId &&
+        Number(r.value || 0) >= prizeConfig.value
+    ).length;
+
+    // 2. 判断数量是否≥当前配置的阈值（minorCount/majorCount）
+    const isMatched = matchedRewardCount >= prizeConfig[countField];
+
+    // 3. 匹配成功时输出详细日志
+    if (isMatched) {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 匹配到奖项${prizeConfig.itemName}，数量：${prizeConfig.value}，共计${matchedRewardCount * prizeConfig.value}个`,
+        type: countField === 'minorCount' ? 'info' : 'success',
+      });
+    }
+    return isMatched;
+  });
+};
+// 次要奖品判断：使用minorCount阈值
+const isMinorPrize = (token,rewards) => hasPrizeMatching(token,rewards, MINOR_PRIZES, "minorCount");
+// 高价值奖品判断：使用majorCount阈值
+const isMajorPrize = (token,rewards) => hasPrizeMatching(token,rewards, MAJOR_PRIZES, "majorCount");
 
 const countRacingRefreshTickets = (rewards) => {
   if (!Array.isArray(rewards)) return 0;
@@ -3562,16 +3587,16 @@ const countRacingRefreshTickets = (rewards) => {
 
 const shouldSendCar = (car, tickets,token) => {
   const rewards = Array.isArray(car?.rewards) ? car.rewards : [];
-  if(isMajorPrize(rewards)){
+  if(isMajorPrize(token,rewards)){
     addLog({
       time: new Date().toLocaleTimeString(),
       message: `[${token.name}] 车辆[${gradeLabel(car.color)}]包含高价值大奖，直接发车`,
-      type: "info",
+      type: "success",
     });
     return true
   }
   if (tickets > 15) return false;
-  if(isMinorPrize(rewards)){
+  if(isMinorPrize(token,rewards)){
     addLog({
       time: new Date().toLocaleTimeString(),
       message: `[${token.name}] 车辆[${gradeLabel(car.color)}]包含大奖，刷新券只剩${tickets}张，直接发车`,
@@ -3591,7 +3616,7 @@ const shouldSendCar = (car, tickets,token) => {
     addLog({
       time: new Date().toLocaleTimeString(),
       message: `[${token.name}] 车辆[${gradeLabel(car.color)}]将就发车`,
-      type: "info",
+      type: "warning",
     });
   }
   return sendFlag;
@@ -3679,7 +3704,6 @@ const batchSmartSendCar = async () => {
       // 3. Process Cars
       for (const car of carList) {
         if (shouldStop.value) break;
-
         if (Number(car.sendAt || 0) !== 0) continue; // Already sent
 
         // Check if we should send immediately
@@ -3997,10 +4021,8 @@ const startBatch = async () => {
 
   isRunning.value = true;
   shouldStop.value = false;
-  // 不再重置logs数组，保留之前的日志
-  // logs.value = [];
 
-  // Reset status
+  // 重置状态
   selectedTokens.value.forEach((id) => {
     tokenStatus.value[id] = "waiting";
   });
@@ -4015,11 +4037,23 @@ const startBatch = async () => {
     let retryCount = 0;
     const MAX_RETRIES = 1;
     let success = false;
+    // 提前获取token，避免循环内重复查找+undefined问题
+    const token = tokens.value.find((t) => t.id === tokenId);
+    if (!token) {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 找不到token: ${tokenId}，跳过执行 ===`,
+        type: "error",
+      });
+      tokenStatus.value[tokenId] = "failed";
+      continue;
+    }
 
     while (retryCount <= MAX_RETRIES && !success) {
-      const token = tokens.value.find((t) => t.id === tokenId);
-
+      // 标记本次是否是最后一次重试（避免无效递增）
+      const isLastRetry = retryCount === MAX_RETRIES;
       try {
+        // 打印执行/重试日志
         if (retryCount === 0) {
           addLog({
             time: new Date().toLocaleTimeString(),
@@ -4035,8 +4069,7 @@ const startBatch = async () => {
         }
 
         await ensureConnection(tokenId);
-
-        // Run tasks
+        // 执行核心任务
         await runner.run(tokenId, {
           onLog: (log) => addLog(log),
           onProgress: (p) => {
@@ -4044,6 +4077,7 @@ const startBatch = async () => {
           },
         });
 
+        // 任务成功，标记状态
         success = true;
         tokenStatus.value[tokenId] = "completed";
         addLog({
@@ -4053,29 +4087,36 @@ const startBatch = async () => {
         });
       } catch (error) {
         console.error(error);
-        if (retryCount < MAX_RETRIES) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `[${token.name}] 执行出错: ${error.message}，等待3秒后重试...`,
-            type: "warning",
-          });
-          // Wait for potential token refresh in store
-          await new Promise((r) => setTimeout(r, 3000));
-          retryCount++;
-        } else {
+        const errorMsg = error.message || "未知错误";
+
+        // 如果是最后一次重试 → 标记失败
+        if (isLastRetry) {
           tokenStatus.value[tokenId] = "failed";
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `[${token.name}] 执行失败: ${error.message}`,
+            message: `[${token.name}] 执行失败: ${errorMsg}`,
             type: "error",
           });
+        } else {
+          // 还有重试次数 → 打印重试提示
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `[${token.name}] 执行出错: ${errorMsg}，等待3秒后重试...`,
+            type: "warning",
+          });
+          // 等待重试
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      } finally {
+        // 核心兜底：仅在「不是最后一次重试、且任务未成功」时递增计数
+        // 确保无论catch是否报错，计数都能正常递增（避免死循环）
+        if (!isLastRetry && !success) {
+          retryCount++;
         }
       }
     }
 
-    // Optional: Disconnect if it wasn't connected before?
-    // For now, keep it connected or let the store manage it.
-    // Maybe wait a bit before next
+    // 每个token执行完后等待1秒
     await new Promise((r) => setTimeout(r, 1000));
   }
 
