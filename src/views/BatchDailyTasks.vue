@@ -112,6 +112,14 @@
               :disabled="isRunning || selectedTokens.length === 0">
               免费领取珍宝阁
             </n-button>
+            <n-button size="small" @click="heroUpgrade"
+                      :disabled="isRunning || selectedTokens.length === 0">
+              英雄升星
+            </n-button>
+            <n-button size="small" @click="heroBookUpgrade"
+                      :disabled="isRunning || selectedTokens.length === 0">
+              升级图鉴
+            </n-button>
             <n-button size="small" @click="legacy_beginhangup"
                       :disabled="isRunning || selectedTokens.length === 0">
               探索功法
@@ -1177,7 +1185,7 @@ const handleTokenSingleCmdTask = async ({
     cmdOptions.push({
       cmd,
       cmdParams,
-      tip: `发送${bizName}请求${loopCount > 1 ? `(${i+1}/${loopCount})` : ''}`,
+      tip: `发送${bizName}请求[cmd:${cmd}, params:${JSON.stringify(cmdParams)}]${loopCount > 1 ? `(${i+1}/${loopCount})` : ''}`,
       cmdTimeout
     });
   }
@@ -1231,6 +1239,53 @@ const legionStoreBuySkinCoins = async () => {
     }
   });
 };
+// 通用英雄升级函数
+const upgradeAboutHero = async (cmd, bizName = "英雄升星") => {
+  const heroIds = [
+    ...Array.from({ length: 20 }, (_, i) => 101 + i),
+    ...Array.from({ length: 28 }, (_, i) => 201 + i),
+    ...Array.from({ length: 14 }, (_, i) => 301 + i),
+  ];
+  addLog({ time: new Date().toLocaleTimeString(), message: `开始执行[${bizName}]...`, type: "info" });
+  for (const heroId of heroIds) {
+    await handleTokenSingleCmdTask({
+      bizName,
+      cmd,
+      cmdParams: { heroId },
+      cmdTimeout: 5000,
+      tokenDelay: 1000,
+      cmdInterval: 500,
+      loopCount: 10,
+    });
+  }
+  addLog({ time: new Date().toLocaleTimeString(), message: `[${bizName}]完成`, type: "success" });
+};
+//升星
+const heroUpgrade = async () => {
+  await upgradeAboutHero("hero_heroupgradestar", "英雄升星");
+};
+//升图鉴
+const heroBookUpgrade = async () => {
+  await upgradeAboutHero("book_upgrade", "英雄图鉴升星");
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: "开始[领取图鉴奖励]...",
+    type: "info"
+  });
+  await handleTokenSingleCmdTask({
+    bizName: "领取图鉴奖励",
+    cmd:"book_claimpointreward",
+    cmdTimeout: 5000,
+    tokenDelay: 1000,
+    cmdInterval: 500,
+    loopCount: 10,
+  });
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: "[领取图鉴奖励]完成",
+    type: "success"
+  });
+}
 
 const legacy_beginhangup = async () => {
   await handleTokenSingleCmdTask({
@@ -2589,7 +2644,7 @@ const batchBuyDungeon = async () => {
         message: `[${token.name}] 执行购买梦境金币商品和高级金杆子`,
         type: "info",
       });
-      await dungeonTool.buyAllGoldAndFishItems(token,
+      await dungeonTool.buyAllNeedItems(token,
           {
             onLog: (log) => addLog(log)
           }

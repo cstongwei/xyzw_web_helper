@@ -10,6 +10,11 @@ export class DungeonTool {
             2: [6, 7], // 中级商人: 橙将碎片, 紫将碎片
             3: [5, 6, 7], // 高级商人: 橙将碎片, 红将碎片, 普通鱼竿
         };
+        // 特殊非金币商品（但需购买）
+        this.specialItemsConfig = {
+            1: [2, 3], // 初级商人： 木头箱、青铜箱
+            3: [2],    // 高级商人： 金鱼竿
+        };
     }
 
     // 复用原有的日志方法，和原类日志格式完全一致
@@ -31,11 +36,15 @@ export class DungeonTool {
         return day === 0 || day === 1 || day === 3 || day === 4; // 周日、周一、周三、周四
     }
     isGoldItem(merchantId, index) {
-        return (
+        return Boolean(
             this.goldItemsConfig[merchantId] && this.goldItemsConfig[merchantId].includes(index)
         );
     }
-
+    isSpecialItem(merchantId, index) {
+        return Boolean(
+            this.specialItemsConfig[merchantId]?.includes(index)
+        );
+    }
 
    // 购买商品
     async buyItem(token,merchantId, index, pos,callbacks = {}) {
@@ -51,8 +60,7 @@ export class DungeonTool {
                 },
                 15000,
             );
-
-            return response && response.code === 0;
+            return response && (response.role|| response.reward);
         } catch (error) {
             this.log(`[${token.name}] 购买商品失败:`, "error",callbacks);
             return false;
@@ -198,7 +206,7 @@ export class DungeonTool {
     /**
      * 一键购买所有金币商品 + 高级商人鱼竿（金杆子）
      */
-    async buyAllGoldAndFishItems(token, callbacks = {}) {
+    async buyAllNeedItems(token, callbacks = {}) {
         if (!this.isDungeonOpen()) {
             this.log(`[${token.name}] 当前不是梦境开放时间（周三/周四/周日/周一）`, "warning", callbacks);
             return;
@@ -225,10 +233,11 @@ export class DungeonTool {
 
             for (let pos = items.length - 1; pos >= 0; pos--) {
                 const index = items[pos];
-                // 购买两类商品：
+                // 购买三类商品：
                 // 1. 金币商品（由 isGoldItem 判断）
-                // 2. 高级商人（ID=3）的鱼竿（index=2，虽非金币商品但需一并购买）
-                if (this.isGoldItem(numId, index) || (numId === 3 && index === 2)) {
+                // 2. 高级商人（ID=3）的金鱼竿（index=2，虽非金币商品但需一并购买）
+                // 3. 初级商人（ID=1）的青铜箱子（index=3）和木头箱子（index=2）
+                if (this.isGoldItem(numId, index) || this.isSpecialItem(numId, index)) {
                     try {
                         const success = await this.buyItem(token, numId, index, pos, callbacks);
                         if (success) successCount++;
@@ -241,7 +250,7 @@ export class DungeonTool {
             }
         }
         this.log(
-            `[${token.name}] 一键购买金币商品+鱼竿完成: 成功 ${successCount} 件, 失败 ${failCount} 件`,
+            `[${token.name}] 一键购买梦境完成: 成功 ${successCount} 件, 失败 ${failCount} 件`,
             "success",
             callbacks
         );
