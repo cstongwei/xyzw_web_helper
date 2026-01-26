@@ -314,7 +314,7 @@
             </n-button>
             <n-button
                 size="small"
-                @click="batchLegacyClaim"
+                @click="legacy_claimhangup"
                 :disabled="isRunning || selectedTokens.length === 0"
             >
               领取功法残卷
@@ -2122,7 +2122,7 @@ const availableTasks = [
   { label: "一键黑市采购", value: "store_purchase" },
   { label: "免费领取珍宝阁", value: "collection_claimfreereward" },
   { label: "探索功法", value: "legacy_beginhangup" },
-  { label: "领取功法残卷", value: "batchLegacyClaim" },
+  { label: "领取功法残卷", value: "legacy_claimhangup" },
   { label: "赠送功法残卷", value: "batchLegacyGiftSendEnhanced" },
 ];
 
@@ -8176,7 +8176,7 @@ const legacy_beginhangup = async () => {
   message.success("批量领取功法残卷结束");
 };
 
-const batchLegacyClaim = async () => {
+const legacy_claimhangup = async () => {
   if (selectedTokens.value.length === 0) return;
   isRunning.value = true;
   shouldStop.value = false;
