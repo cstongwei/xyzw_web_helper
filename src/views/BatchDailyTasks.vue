@@ -223,6 +223,12 @@
             >
               一键梦境
             </n-button>
+            <n-button size="small" @click="batchBuyDungeon" :disabled="isRunning ||
+              selectedTokens.length === 0 ||
+              !ismengjingActivityOpen
+              ">
+              梦境购买
+            </n-button>
             <n-button
                 size="small"
                 @click="batchclubsign"
@@ -294,19 +300,31 @@
             >
               免费领取珍宝阁
             </n-button>
+            <n-button size="small" @click="heroUpgrade"
+                      :disabled="isRunning || selectedTokens.length === 0">
+              英雄升星
+            </n-button>
+            <n-button size="small" @click="heroBookUpgrade"
+                      :disabled="isRunning || selectedTokens.length === 0">
+              升级图鉴
+            </n-button>
+            <n-button size="small" @click="legacy_beginhangup"
+                      :disabled="isRunning || selectedTokens.length === 0">
+              探索功法
+            </n-button>
             <n-button
                 size="small"
                 @click="batchLegacyClaim"
                 :disabled="isRunning || selectedTokens.length === 0"
             >
-              批量功法残卷领取
+              领取功法残卷
             </n-button>
             <n-button
                 size="small"
                 @click="showLegacyGiftModal = true"
                 :disabled="isRunning || selectedTokens.length === 0"
             >
-              批量功法残卷赠送
+              赠送功法残卷
             </n-button>
           </n-space>
           <!-- 排序按钮组 -->
@@ -1762,11 +1780,15 @@ import { Settings } from "@vicons/ionicons5";
 import getAppEnvironment from "@/utils/envUtil.js";
 import TaskManager from "@/utils/taskManager.js";
 import {batchLogger} from "@/utils/logger.js";
+import {FormationTool} from "@/utils/FormationTool.js";
+import {DungeonTool} from "@/utils/dungeonTool.js";
 const env = getAppEnvironment();
 
 // Initialize token store, message service, and task runner
 const tokenStore = useTokenStore();
 const message = useMessage();
+const formationTool = new FormationTool(tokenStore);
+const dungeonTool = new DungeonTool(tokenStore);
 
 // 排序配置（从localStorage读取，与TokenImport共享）
 const savedSortConfig = localStorage.getItem("tokenSortConfig");
@@ -2090,6 +2112,7 @@ const availableTasks = [
   { label: "一键宝库前3层", value: "batchbaoku13" },
   { label: "一键宝库4,5层", value: "batchbaoku45" },
   { label: "一键梦境", value: "batchmengjing" },
+  { label: "梦境购买", value: "batchBuyDungeon" },
   { label: "一键俱乐部签到", value: "batchclubsign" },
   { label: "一键竞技场战斗3次", value: "batcharenafight" },
   { label: "一键钓鱼补齐", value: "batchTopUpFish" },
@@ -2098,8 +2121,9 @@ const availableTasks = [
   { label: "一键购买四圣碎片", value: "legion_storebuygoods" },
   { label: "一键黑市采购", value: "store_purchase" },
   { label: "免费领取珍宝阁", value: "collection_claimfreereward" },
-  { label: "批量领取功法残卷", value: "batchLegacyClaim" },
-  { label: "批量赠送功法残卷", value: "batchLegacyGiftSendEnhanced" },
+  { label: "探索功法", value: "legacy_beginhangup" },
+  { label: "领取功法残卷", value: "batchLegacyClaim" },
+  { label: "赠送功法残卷", value: "batchLegacyGiftSendEnhanced" },
 ];
 
 const CarresearchItem = [
@@ -2730,6 +2754,182 @@ const deselectAllTasks = () => {
   taskForm.selectedTasks = [];
 };
 
+/**
+ * 通用处理账号业务 - 支持单/多指令+多层级超时优先级兜底 ✅
+ * 所有业务统一调用这个方法即可，单指令就是传长度为1的数组
+ * @param {Object} options 差异化配置参数
+ * @param {String} options.bizName 业务名称 - 用于日志显示 (如：重置罐子、购买四圣碎片)
+ * @param {Array}  options.cmdOptions 【核心】指令数组，必传！数组每一项为指令配置
+ *                cmdOptions数组项格式: { cmd:指令名, cmdParams:{}, tip:执行日志提示, cmdTimeout:【指令自身超时，可选】 }
+ * @param {Function} options.customErrorHandler 可选-专属错误处理函数，不传则走通用逻辑
+ * @param {Number} options.cmdInterval 可选-指令之间的间隔时间(多指令专用)，默认500ms
+ * @param {Number} options.tokenDelay 可选-账号切换的间隔时间，默认1000ms
+ * @param {Number} options.cmdTimeout 可选-【全局公共超时】所有指令的统一超时，默认5000ms
+ */
+const handleTokenMuiltCmdTask = async ({
+                                         bizName,
+                                         cmdOptions,
+                                         customErrorHandler,
+                                         cmdInterval = 500,
+                                         tokenDelay = 1000,
+                                         cmdTimeout = 5000,
+                                       }) => {
+  // 1. 前置校验：无选中账号/无指令数组 则返回
+  if (selectedTokens.value.length === 0 || !Array.isArray(cmdOptions) || cmdOptions.length === 0) return;
+
+  // 2. 初始化运行状态
+  isRunning.value = true;
+  shouldStop.value = false;
+  selectedTokens.value.forEach((id) => {
+    tokenStatus.value[id] = "waiting";
+  });
+
+  // 3. 遍历选中的账号执行
+  for (const tokenId of selectedTokens.value) {
+    if (shouldStop.value) return; // 支持中途停止
+
+    // 设置当前执行的账号状态
+    currentRunningTokenId.value = tokenId;
+    tokenStatus.value[tokenId] = "running";
+    currentProgress.value = 0;
+
+    // 防御性判空，防止账号不存在崩溃
+    const token = tokens.value.find((t) => t.id === tokenId);
+    if (!token) {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 账号ID【${tokenId}】不存在，跳过执行 ===`,
+        type: "error",
+      });
+      tokenStatus.value[tokenId] = "failed";
+      continue;
+    }
+    let hasError = false;
+    let errorMsg = "";
+
+    try {
+      // 添加开始日志 (保留你优化的格式)
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== [${token.name}] 开始${bizName}  ===`,
+        type: "info",
+      });
+
+      // 确保账号连接
+      await ensureConnection(tokenId);
+      const cmdOptionsLength = cmdOptions.length
+      for (let i = 0; i < cmdOptionsLength; i++) {
+        const { cmd, cmdParams = {}, tip = `发送指令${i+1}`, cmdTimeout: cmdItemTimeout } = cmdOptions[i];
+        if (!cmd) {
+          hasError = true;
+          errorMsg = "指令名称不能为空";
+          break;
+        }
+        // 超时优先级兜底逻辑 【指令自身 > 外层公共（系统默认5000）】
+        const finalTimeout = cmdItemTimeout ?? cmdTimeout;
+
+        // 打印当前指令的日志提示
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `[${token.name}] ${tip}`,
+          type: "info",
+        });
+        // 发送指令请求 - 使用最终的优先级超时时间
+        const result = await tokenStore.sendMessageWithPromise(tokenId, cmd, cmdParams, finalTimeout);
+        // 有错误则终止所有后续指令
+        if (result.error) {
+          hasError = true;
+          errorMsg = result.error;
+          break;
+        }
+        //指令之间加延时，最后一条指令不加，避免多余等待
+        if (i < cmdOptionsLength - 1) {
+          await new Promise((r) => setTimeout(r, cmdInterval));
+        }
+      }
+
+      // 4. 统一处理执行结果：成功/失败
+      if (hasError) {
+        if (customErrorHandler && typeof customErrorHandler === 'function') {
+          customErrorHandler(token, errorMsg);
+        } else {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `[${token.name}] ${bizName}失败: ${errorMsg}`,
+            type: "error",
+          });
+        }
+        tokenStatus.value[tokenId] = "failed";
+      } else {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== [${token.name}] ${bizName}成功 ===`,
+          type: "success",
+        });
+        tokenStatus.value[tokenId] = "completed";
+      }
+
+      currentProgress.value = 100;
+    } catch (error) {
+      // 全局异常捕获
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] ${bizName}过程出错: ${error.message}`,
+        type: "error",
+      });
+      tokenStatus.value[tokenId] = "failed";
+      hasError = true;
+    } finally {
+      await new Promise((r) => setTimeout(r, tokenDelay));
+    }
+  }
+
+  // 5. 执行完成，重置所有状态
+  currentRunningTokenId.value = null;
+  isRunning.value = false;
+  shouldStop.value = false;
+};
+/**
+ * 【单指令快捷调用】语法糖方法
+ * 内部：把单指令参数包装成数组，调用核心的多指令方法
+ * @param {Object} options 原有单指令的入参
+ */
+const handleTokenSingleCmdTask = async ({
+                                          bizName,
+                                          cmd,
+                                          cmdParams = {},
+                                          customErrorHandler,
+                                          loopCount = 1,
+                                          cmdTimeout = 5000,
+                                          loopInterval = 500,
+                                          tokenDelay = 1000
+                                        }) => {
+  // 判空防御 - 指令名不能为空，提前兜底
+  if (!cmd) {
+    addLog({time: new Date().toLocaleTimeString(),message: `业务【${bizName}】指令名为空，执行中断`,type: "error"});
+    return;
+  }
+
+  // 处理【循环执行N次同一条指令】(皮肤币5次)的场景
+  const cmdOptions = [];
+  for (let i = 0; i < loopCount; i++) {
+    cmdOptions.push({
+      cmd,
+      cmdParams,
+      tip: `发送${bizName}请求[cmd:${cmd}, params:${JSON.stringify(cmdParams)}]${loopCount > 1 ? `(${i+1}/${loopCount})` : ''}`,
+      cmdTimeout
+    });
+  }
+  // 核心：调用多指令核心方法，透传所有参数
+  await handleTokenMuiltCmdTask({
+    bizName,
+    cmdOptions, //
+    customErrorHandler,
+    cmdInterval: loopInterval,
+    tokenDelay,
+    cmdTimeout
+  });
+};
 // 一键购买四圣碎片
 const legion_storebuygoods = async () => {
   if (selectedTokens.value.length === 0) return;
@@ -3023,6 +3223,60 @@ const collection_claimfreereward = async () => {
   shouldStop.value = false;
 };
 
+// 通用英雄升级函数
+const upgradeAboutHero = async (cmd, bizName = "英雄升星") => {
+  isRunning.value = true;
+  shouldStop.value = false;
+  const heroIds = [
+    ...Array.from({ length: 20 }, (_, i) => 101 + i),
+    ...Array.from({ length: 28 }, (_, i) => 201 + i),
+    ...Array.from({ length: 14 }, (_, i) => 301 + i),
+  ];
+  addLog({ time: new Date().toLocaleTimeString(), message: `开始执行[${bizName}]...`, type: "info" });
+  try {
+    for (const heroId of heroIds) {
+      if (shouldStop.value) return;
+      await handleTokenSingleCmdTask({
+        bizName,
+        cmd,
+        cmdParams: { heroId },
+        cmdTimeout: 5000,
+        tokenDelay: 1000,
+        cmdInterval: 500,
+        loopCount: 10,
+      });
+    }
+    addLog({ time: new Date().toLocaleTimeString(), message: `[${bizName}]完成`, type: "success" });
+  }finally {
+    isRunning.value = false;
+  }
+};
+//升星
+const heroUpgrade = async () => {
+  await upgradeAboutHero("hero_heroupgradestar", "英雄升星");
+};
+//升图鉴
+const heroBookUpgrade = async () => {
+  await upgradeAboutHero("book_upgrade", "英雄图鉴升星");
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: "开始[领取图鉴奖励]...",
+    type: "info"
+  });
+  await handleTokenSingleCmdTask({
+    bizName: "领取图鉴奖励",
+    cmd:"book_claimpointreward",
+    cmdTimeout: 5000,
+    tokenDelay: 1000,
+    cmdInterval: 500,
+    loopCount: 10,
+  });
+  addLog({
+    time: new Date().toLocaleTimeString(),
+    message: "[领取图鉴奖励]完成",
+    type: "success"
+  });
+}
 // 黑市一键采购
 const store_purchase = async () => {
   if (selectedTokens.value.length === 0) return;
@@ -5161,6 +5415,73 @@ const batchmengjing = async () => {
   message.success("批量梦境结束");
 };
 
+/**
+ * 批量购买梦境
+ */
+const batchBuyDungeon = async () => {
+  if (selectedTokens.value.length === 0) return;
+  isRunning.value = true;
+  shouldStop.value = false;
+  // 不再重置logs数组，保留之前的日志
+  // logs.value = [];
+  // Reset status
+  selectedTokens.value.forEach((id) => {
+    tokenStatus.value[id] = "waiting";
+  });
+  // 并行执行任务，但通过connectionQueue限制并发连接数
+  const taskPromises = selectedTokens.value.map(async (tokenId) => {
+    if (shouldStop.value) return;
+    tokenStatus.value[tokenId] = "running";
+    const token = tokens.value.find((t) => t.id === tokenId);
+    try {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 开始一键购买梦境: ${token.name} ===`,
+        type: "info",
+      });
+      await ensureConnection(tokenId);
+      if (shouldStop.value) return;
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 执行购买梦境金币商品和高级金杆子`,
+        type: "info",
+      });
+      await dungeonTool.buyAllNeedItems(token,
+          {
+            onLog: (log) => addLog(log)
+          }
+      );
+      tokenStatus.value[tokenId] = "completed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 购买梦境商品完成 ===`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error(error);
+      tokenStatus.value[tokenId] = "failed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `[${token.name}] 购买梦境商品失败: ${error.message || "未知错误"}`,
+        type: "error",
+      });
+    } finally {
+      // 完成后关闭连接并释放槽位
+      tokenStore.closeWebSocketConnection(tokenId);
+      releaseConnectionSlot();
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+        type: "info",
+      });
+    }
+  });
+  // 等待所有任务完成
+  await Promise.all(taskPromises);
+  isRunning.value = false;
+  currentRunningTokenId.value = null;
+  message.success("批量购买梦境商品结束");
+};
 const batchlingguanzi = async () => {
   if (selectedTokens.value.length === 0) return;
   isRunning.value = true;
@@ -5582,7 +5903,8 @@ const climbTower = async () => {
     tokenStatus.value[tokenId] = "running";
 
     const token = tokens.value.find((t) => t.id === tokenId);
-
+    let switchFormation = false
+    let originFormation;
     try {
       addLog({
         time: new Date().toLocaleTimeString(),
@@ -5591,7 +5913,22 @@ const climbTower = async () => {
       });
 
       await ensureConnection(tokenId);
-
+      // 切换爬塔阵容
+      //获取配置
+      const settings = loadSettings(tokenId)
+      originFormation = await formationTool.getCurrentFormation(tokenId,
+          {
+            onLog: (log) => addLog(log)
+          });
+      switchFormation = String(originFormation) !== String(settings.towerFormation)
+      if(switchFormation){
+        await formationTool.switchFormation(tokenId,
+            settings.towerFormation,
+            "爬塔阵容",
+            {
+              onLog: (log) => addLog(log),
+            })
+      }
       // Initial check
       // 模仿 TowerStatus.vue 的逻辑，同时请求 tower_getinfo 和 role_getroleinfo
       await tokenStore
@@ -5701,6 +6038,14 @@ const climbTower = async () => {
         type: "error",
       });
     } finally {
+      if(switchFormation){
+        await formationTool.switchFormation(tokenId,
+            originFormation,
+            "还原阵容",
+            {
+              onLog: (log) => addLog(log),
+            })
+      }
       // 完成后关闭连接并释放槽位
       tokenStore.closeWebSocketConnection(tokenId);
       releaseConnectionSlot();
@@ -7732,6 +8077,70 @@ const batchClaimFreeEnergy = async () => {
   isRunning.value = false;
   currentRunningTokenId.value = null;
   message.success("批量领取怪异塔免费道具结束");
+};
+
+const legacy_beginhangup = async () => {
+  if (selectedTokens.value.length === 0) return;
+  isRunning.value = true;
+  shouldStop.value = false;
+
+  // Reset status
+  selectedTokens.value.forEach((id) => {
+    tokenStatus.value[id] = "waiting";
+  });
+
+  // 并行执行任务，但通过connectionQueue限制并发连接数
+  const taskPromises = selectedTokens.value.map(async (tokenId) => {
+    if (shouldStop.value) return;
+    tokenStatus.value[tokenId] = "running";
+
+    const token = tokens.value.find((t) => t.id === tokenId);
+    try {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 开始探索功法残券: ${token.name} ===`,
+        type: "info",
+      });
+      await ensureConnection(tokenId);
+
+      const LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          "legacy_beginhangup",
+          {},
+          5000,
+      );
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 成功探索功法残券${LegacyClaimHangUpResp.reward[0].value}，共有${LegacyClaimHangUpResp.role.items[37007].quantity}个`,
+        type: "success",
+      });
+      tokenStatus.value[tokenId] = "completed";
+    } catch (error) {
+      console.error(error);
+      tokenStatus.value[tokenId] = "failed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 探索功法残券失败: ${error.message || "未知错误"}`,
+        type: "error",
+      });
+    } finally {
+      // 完成后关闭连接并释放槽位
+      tokenStore.closeWebSocketConnection(tokenId);
+      releaseConnectionSlot();
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+        type: "info",
+      });
+    }
+  });
+
+  // 等待所有任务完成
+  await Promise.all(taskPromises);
+
+  isRunning.value = false;
+  currentRunningTokenId.value = null;
+  message.success("批量领取功法残卷结束");
 };
 
 const batchLegacyClaim = async () => {
