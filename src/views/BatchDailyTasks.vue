@@ -3826,6 +3826,13 @@ onMounted(() => {
   // Start the task scheduler after all functions are initialized
   if(env.isDesktop){
     loadScheduledTasks();
+    // 初始化统计变量
+    let successCount = 0;
+    let disabledCount = 0;
+    let failCount = 0;
+    const successTasks = [];
+    const disabledTasks = [];
+    const failTasks = [];
     // 注册所有启用的任务
     scheduledTasks.value.forEach(task => {
       if (task.enabled) {
@@ -3841,21 +3848,36 @@ onMounted(() => {
         if (TaskManager.registerTask(task.id, config, executor)) {
           TaskManager.activateTask(task.id);
           batchLogger.info(`[TaskManager] 任务 ${task.id} ${task.name}已注册并激活`);
+          successCount++;
+          successTasks.push(`${task.name}`);
         } else {
           batchLogger.error(`[TaskManager] 任务 ${task.id} ${task.name}注册失败`);
+          failCount++;
+          failTasks.push(`${task.name}`);
         }
       }else{
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== 定时任务任务 ${task.id} ${task.name}被禁用 ===`,
-          type: "warning",
-        });
+        disabledCount++;
+        disabledTasks.push(`${task.name}`);
       }
+    });
+    // 输出汇总日志
+    const summaryMessage = [
+      "=== 定时任务调度服务报告 ===",
+      `总任务数: ${scheduledTasks.value.length}`,
+      `成功启动: ${successCount} [${successTasks.join(', ')}]`,
+      `禁用任务: ${disabledCount} [${disabledTasks.join(', ')}]`,
+      `注册失败: ${failCount} [${failTasks.join(', ')}]`
+    ].join('\n');
+
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: summaryMessage,
+      type: "info",
     });
     addLog({
       time: new Date().toLocaleTimeString(),
       message: "=== 定时任务调度服务已启动 ===",
-      type: "info",
+      type: "success",
     });
   }else{
     scheduleTaskExecution();
