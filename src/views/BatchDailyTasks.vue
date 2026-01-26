@@ -3844,7 +3844,18 @@ onMounted(() => {
         } else {
           batchLogger.error(`[TaskManager] 任务 ${task.id} ${task.name}注册失败`);
         }
+      }else{
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== 定时任务任务 ${task.id} ${task.name}被禁用 ===`,
+          type: "warning",
+        });
       }
+    });
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: "=== 定时任务调度服务已启动 ===",
+      type: "info",
     });
   }else{
     scheduleTaskExecution();
