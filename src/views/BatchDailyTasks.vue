@@ -572,6 +572,10 @@
                 size="small"
             />
           </div>
+          <div class="setting-item">
+            <label class="setting-label">爬塔阵容</label>
+            <n-select v-model:value="currentSettings.towerFormation" :options="formationOptions" size="small" />
+          </div>
           <div class="setting-switches">
             <div class="switch-row">
               <span class="switch-label">领罐子</span
@@ -649,6 +653,11 @@
                 :options="bossTimesOptions"
                 size="small"
             />
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">爬塔阵容</label>
+            <n-select v-model:value="currentTemplate.towerFormation" :options="formationOptions" size="small" />
           </div>
           <div class="setting-switches">
             <div class="switch-row">
@@ -1929,6 +1938,7 @@ const currentSettings = reactive({
   arenaFormation: 1,
   bossFormation: 1,
   bossTimes: 2,
+  towerFormation:2,
   claimBottle: true,
   payRecruit: true,
   openBox: true,
@@ -1952,6 +1962,7 @@ const currentTemplate = reactive({
   arenaFormation: 1,
   bossFormation: 1,
   bossTimes: 2,
+  towerFormation: 2,
   claimBottle: true,
   payRecruit: true,
   openBox: true,
@@ -2754,182 +2765,6 @@ const deselectAllTasks = () => {
   taskForm.selectedTasks = [];
 };
 
-/**
- * 通用处理账号业务 - 支持单/多指令+多层级超时优先级兜底 ✅
- * 所有业务统一调用这个方法即可，单指令就是传长度为1的数组
- * @param {Object} options 差异化配置参数
- * @param {String} options.bizName 业务名称 - 用于日志显示 (如：重置罐子、购买四圣碎片)
- * @param {Array}  options.cmdOptions 【核心】指令数组，必传！数组每一项为指令配置
- *                cmdOptions数组项格式: { cmd:指令名, cmdParams:{}, tip:执行日志提示, cmdTimeout:【指令自身超时，可选】 }
- * @param {Function} options.customErrorHandler 可选-专属错误处理函数，不传则走通用逻辑
- * @param {Number} options.cmdInterval 可选-指令之间的间隔时间(多指令专用)，默认500ms
- * @param {Number} options.tokenDelay 可选-账号切换的间隔时间，默认1000ms
- * @param {Number} options.cmdTimeout 可选-【全局公共超时】所有指令的统一超时，默认5000ms
- */
-const handleTokenMuiltCmdTask = async ({
-                                         bizName,
-                                         cmdOptions,
-                                         customErrorHandler,
-                                         cmdInterval = 500,
-                                         tokenDelay = 1000,
-                                         cmdTimeout = 5000,
-                                       }) => {
-  // 1. 前置校验：无选中账号/无指令数组 则返回
-  if (selectedTokens.value.length === 0 || !Array.isArray(cmdOptions) || cmdOptions.length === 0) return;
-
-  // 2. 初始化运行状态
-  isRunning.value = true;
-  shouldStop.value = false;
-  selectedTokens.value.forEach((id) => {
-    tokenStatus.value[id] = "waiting";
-  });
-
-  // 3. 遍历选中的账号执行
-  for (const tokenId of selectedTokens.value) {
-    if (shouldStop.value) return; // 支持中途停止
-
-    // 设置当前执行的账号状态
-    currentRunningTokenId.value = tokenId;
-    tokenStatus.value[tokenId] = "running";
-    currentProgress.value = 0;
-
-    // 防御性判空，防止账号不存在崩溃
-    const token = tokens.value.find((t) => t.id === tokenId);
-    if (!token) {
-      addLog({
-        time: new Date().toLocaleTimeString(),
-        message: `=== 账号ID【${tokenId}】不存在，跳过执行 ===`,
-        type: "error",
-      });
-      tokenStatus.value[tokenId] = "failed";
-      continue;
-    }
-    let hasError = false;
-    let errorMsg = "";
-
-    try {
-      // 添加开始日志 (保留你优化的格式)
-      addLog({
-        time: new Date().toLocaleTimeString(),
-        message: `=== [${token.name}] 开始${bizName}  ===`,
-        type: "info",
-      });
-
-      // 确保账号连接
-      await ensureConnection(tokenId);
-      const cmdOptionsLength = cmdOptions.length
-      for (let i = 0; i < cmdOptionsLength; i++) {
-        const { cmd, cmdParams = {}, tip = `发送指令${i+1}`, cmdTimeout: cmdItemTimeout } = cmdOptions[i];
-        if (!cmd) {
-          hasError = true;
-          errorMsg = "指令名称不能为空";
-          break;
-        }
-        // 超时优先级兜底逻辑 【指令自身 > 外层公共（系统默认5000）】
-        const finalTimeout = cmdItemTimeout ?? cmdTimeout;
-
-        // 打印当前指令的日志提示
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `[${token.name}] ${tip}`,
-          type: "info",
-        });
-        // 发送指令请求 - 使用最终的优先级超时时间
-        const result = await tokenStore.sendMessageWithPromise(tokenId, cmd, cmdParams, finalTimeout);
-        // 有错误则终止所有后续指令
-        if (result.error) {
-          hasError = true;
-          errorMsg = result.error;
-          break;
-        }
-        //指令之间加延时，最后一条指令不加，避免多余等待
-        if (i < cmdOptionsLength - 1) {
-          await new Promise((r) => setTimeout(r, cmdInterval));
-        }
-      }
-
-      // 4. 统一处理执行结果：成功/失败
-      if (hasError) {
-        if (customErrorHandler && typeof customErrorHandler === 'function') {
-          customErrorHandler(token, errorMsg);
-        } else {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `[${token.name}] ${bizName}失败: ${errorMsg}`,
-            type: "error",
-          });
-        }
-        tokenStatus.value[tokenId] = "failed";
-      } else {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== [${token.name}] ${bizName}成功 ===`,
-          type: "success",
-        });
-        tokenStatus.value[tokenId] = "completed";
-      }
-
-      currentProgress.value = 100;
-    } catch (error) {
-      // 全局异常捕获
-      addLog({
-        time: new Date().toLocaleTimeString(),
-        message: `[${token.name}] ${bizName}过程出错: ${error.message}`,
-        type: "error",
-      });
-      tokenStatus.value[tokenId] = "failed";
-      hasError = true;
-    } finally {
-      await new Promise((r) => setTimeout(r, tokenDelay));
-    }
-  }
-
-  // 5. 执行完成，重置所有状态
-  currentRunningTokenId.value = null;
-  isRunning.value = false;
-  shouldStop.value = false;
-};
-/**
- * 【单指令快捷调用】语法糖方法
- * 内部：把单指令参数包装成数组，调用核心的多指令方法
- * @param {Object} options 原有单指令的入参
- */
-const handleTokenSingleCmdTask = async ({
-                                          bizName,
-                                          cmd,
-                                          cmdParams = {},
-                                          customErrorHandler,
-                                          loopCount = 1,
-                                          cmdTimeout = 5000,
-                                          loopInterval = 500,
-                                          tokenDelay = 1000
-                                        }) => {
-  // 判空防御 - 指令名不能为空，提前兜底
-  if (!cmd) {
-    addLog({time: new Date().toLocaleTimeString(),message: `业务【${bizName}】指令名为空，执行中断`,type: "error"});
-    return;
-  }
-
-  // 处理【循环执行N次同一条指令】(皮肤币5次)的场景
-  const cmdOptions = [];
-  for (let i = 0; i < loopCount; i++) {
-    cmdOptions.push({
-      cmd,
-      cmdParams,
-      tip: `发送${bizName}请求[cmd:${cmd}, params:${JSON.stringify(cmdParams)}]${loopCount > 1 ? `(${i+1}/${loopCount})` : ''}`,
-      cmdTimeout
-    });
-  }
-  // 核心：调用多指令核心方法，透传所有参数
-  await handleTokenMuiltCmdTask({
-    bizName,
-    cmdOptions, //
-    customErrorHandler,
-    cmdInterval: loopInterval,
-    tokenDelay,
-    cmdTimeout
-  });
-};
 // 一键购买四圣碎片
 const legion_storebuygoods = async () => {
   if (selectedTokens.value.length === 0) return;
@@ -3223,60 +3058,215 @@ const collection_claimfreereward = async () => {
   shouldStop.value = false;
 };
 
-// 通用英雄升级函数
-const upgradeAboutHero = async (cmd, bizName = "英雄升星") => {
-  isRunning.value = true;
-  shouldStop.value = false;
-  const heroIds = [
-    ...Array.from({ length: 20 }, (_, i) => 101 + i),
-    ...Array.from({ length: 28 }, (_, i) => 201 + i),
-    ...Array.from({ length: 14 }, (_, i) => 301 + i),
-  ];
-  addLog({ time: new Date().toLocaleTimeString(), message: `开始执行[${bizName}]...`, type: "info" });
-  try {
-    for (const heroId of heroIds) {
-      if (shouldStop.value) return;
-      await handleTokenSingleCmdTask({
-        bizName,
-        cmd,
-        cmdParams: { heroId },
-        cmdTimeout: 5000,
-        tokenDelay: 1000,
-        cmdInterval: 500,
-        loopCount: 10,
-      });
-    }
-    addLog({ time: new Date().toLocaleTimeString(), message: `[${bizName}]完成`, type: "success" });
-  }finally {
-    isRunning.value = false;
-  }
-};
+const heroIds = [
+  ...Array.from({ length: 20 }, (_, i) => 101 + i),
+  ...Array.from({ length: 28 }, (_, i) => 201 + i),
+  ...Array.from({ length: 14 }, (_, i) => 301 + i),
+];
+
 //升星
 const heroUpgrade = async () => {
-  await upgradeAboutHero("hero_heroupgradestar", "英雄升星");
+  if (selectedTokens.value.length === 0) return;
+  isRunning.value = true;
+  shouldStop.value = false;
+
+  // Reset status
+  selectedTokens.value.forEach((id) => {
+    tokenStatus.value[id] = "waiting";
+  });
+
+  // 并行执行任务，但通过connectionQueue限制并发连接数
+  const taskPromises = selectedTokens.value.map(async (tokenId) => {
+    if (shouldStop.value) return;
+    tokenStatus.value[tokenId] = "running";
+
+    const token = tokens.value.find((t) => t.id === tokenId);
+    try {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 开始英雄升星: ${token.name} ===`,
+        type: "info",
+      });
+      await ensureConnection(tokenId);
+      if (shouldStop.value) return;
+
+      for(const heroId of heroIds){
+        if (shouldStop.value) return;
+        for(let i = 0; i < 8; i++) {
+          if (shouldStop.value) return;
+          const result = await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "hero_heroupgradestar",
+              {heroId},
+              5000,
+          );
+          await new Promise((r) => setTimeout(r, 500));
+          if (result.error) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 英雄${heroId}第${i+1}次升星失败: ${result.error}`,
+              type: "error",
+            });
+            break;
+          } else {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 英雄${heroId}第${i+1}次升星成功`,
+              type: "success",
+            })
+          }
+        }
+      }
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 英雄升星完成 ===`,
+        type: "success",
+      });
+      tokenStatus.value[tokenId] = "completed";
+    } catch (error) {
+      console.error(error);
+      tokenStatus.value[tokenId] = "failed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 英雄升星失败: ${error.message || "未知错误"}`,
+        type: "error",
+      });
+    } finally {
+      // 完成后关闭连接并释放槽位
+      tokenStore.closeWebSocketConnection(tokenId);
+      releaseConnectionSlot();
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+        type: "info",
+      });
+    }
+  });
+
+  // 等待所有任务完成
+  await Promise.all(taskPromises);
+
+  isRunning.value = false;
+  currentRunningTokenId.value = null;
+  message.success("批量处理英雄升星结束");
 };
 //升图鉴
 const heroBookUpgrade = async () => {
-  await upgradeAboutHero("book_upgrade", "英雄图鉴升星");
-  addLog({
-    time: new Date().toLocaleTimeString(),
-    message: "开始[领取图鉴奖励]...",
-    type: "info"
+  if (selectedTokens.value.length === 0) return;
+  isRunning.value = true;
+  shouldStop.value = false;
+
+  // Reset status
+  selectedTokens.value.forEach((id) => {
+    tokenStatus.value[id] = "waiting";
   });
-  await handleTokenSingleCmdTask({
-    bizName: "领取图鉴奖励",
-    cmd:"book_claimpointreward",
-    cmdTimeout: 5000,
-    tokenDelay: 1000,
-    cmdInterval: 500,
-    loopCount: 10,
+
+  // 并行执行任务，但通过connectionQueue限制并发连接数
+  const taskPromises = selectedTokens.value.map(async (tokenId) => {
+    if (shouldStop.value) return;
+    tokenStatus.value[tokenId] = "running";
+
+    const token = tokens.value.find((t) => t.id === tokenId);
+    try {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 开始升级英雄图鉴: ${token.name} ===`,
+        type: "info",
+      });
+      await ensureConnection(tokenId);
+      if (shouldStop.value) return;
+
+      for(const heroId of heroIds){
+        if (shouldStop.value) return;
+        for(let i = 0; i < 8; i++) {
+          if (shouldStop.value) return;
+          const result = await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "book_upgrade",
+              {heroId},
+              5000,
+          );
+          await new Promise((r) => setTimeout(r, 500));
+          if (result.error) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 英雄${heroId}第${i+1}次图鉴升级失败: ${result.error}`,
+              type: "error",
+            });
+            break;
+          } else {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 英雄${heroId}第${i+1}次图鉴升级成功`,
+              type: "success",
+            })
+          }
+        }
+      }
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 图鉴升级完成 ===`,
+        type: "success",
+      });
+      for(let i = 0; i < 5; i++) {
+        if (shouldStop.value) return;
+        const result =await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "book_claimpointreward",
+            {},
+            5000,
+        );
+        await new Promise((r) => setTimeout(r, 500));
+        if (result.error) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 第${i+1}次领图鉴奖励失败: ${result.error}`,
+            type: "error",
+          });
+          break;
+        } else {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 第${i+1}次领图鉴奖励成功`,
+            type: "success",
+          })
+        }
+      }
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 领图鉴奖励完成 ===`,
+        type: "success",
+      });
+
+      tokenStatus.value[tokenId] = "completed";
+    } catch (error) {
+      console.error(error);
+      tokenStatus.value[tokenId] = "failed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 图鉴处理失败: ${error.message || "未知错误"}`,
+        type: "error",
+      });
+    } finally {
+      // 完成后关闭连接并释放槽位
+      tokenStore.closeWebSocketConnection(tokenId);
+      releaseConnectionSlot();
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+        type: "info",
+      });
+    }
   });
-  addLog({
-    time: new Date().toLocaleTimeString(),
-    message: "[领取图鉴奖励]完成",
-    type: "success"
-  });
-}
+
+  // 等待所有任务完成
+  await Promise.all(taskPromises);
+
+  isRunning.value = false;
+  currentRunningTokenId.value = null;
+  message.success("批量处理图鉴结束");
+};
+
 // 黑市一键采购
 const store_purchase = async () => {
   if (selectedTokens.value.length === 0) return;
@@ -4246,9 +4236,13 @@ const executeScheduledTask = async (task) => {
       });
       return;
     }
+    // 获取当前未过期的所有 token ID 集合（用于快速查找）
+    const validTokenIds = new Set(tokens.value.map(t => t.id));
 
     // Set selected tokens from the task - use selectedTokens if connectedTokens is not available
-    selectedTokens.value = [...(task.connectedTokens || task.selectedTokens)];
+    selectedTokens.value = [...(task.connectedTokens || task.selectedTokens)]
+        .filter(token => validTokenIds.has(token.id));
+    // selectedTokens.value = [...(task.connectedTokens || task.selectedTokens)];
 
     // Execute selected tasks in parallel
     const taskPromises = task.selectedTasks.map(async (taskName) => {
@@ -4583,6 +4577,7 @@ const loadSettings = (tokenId) => {
       arenaFormation: 1,
       bossFormation: 1,
       bossTimes: 2,
+      towerFormation: 1,
       claimBottle: true,
       payRecruit: true,
       openBox: true,
