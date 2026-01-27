@@ -381,18 +381,16 @@
                   <div class="token-row">
                     <n-checkbox
                         :value="token.id"
-                        :label="token.name"
-                        style="flex: 1"
                     >
                       <div class="token-item">
-                        <span>{{ token.name }}</span>
-                        <n-tag
-                            size="small"
-                            :type="getStatusType(token.id)"
-                            style="margin-left: 8px"
-                        >
-                          {{ getStatusText(token.id) }}
-                        </n-tag>
+                        <span :style="{ color: isTokenExpiringSoon(token) ? '#faad14' : 'inherit' }">{{ token.name }}</span>
+<!--                        <n-tag-->
+<!--                            size="small"-->
+<!--                            :type="getStatusType(token.id)"-->
+<!--                            style="margin-left: 8px"-->
+<!--                        >-->
+<!--                          {{ getStatusText(token.id) }}-->
+<!--                        </n-tag>-->
                       </div>
                     </n-checkbox>
                     <n-button
@@ -4916,7 +4914,15 @@ const handleSelectAll = (checked) => {
     selectedTokens.value = [];
   }
 };
-
+const isTokenExpiringSoon = (token) => {
+  if (!token.expiryDate) return false;
+  const expiryDate = new Date(token.expiryDate);
+  const now = new Date(currentTime.value);
+  const fiveDaysLater = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+  const five = expiryDate <= fiveDaysLater
+  const notExpire = expiryDate > now
+  return five && notExpire;
+};
 const getStatusType = (tokenId) => {
   const status = tokenStatus.value[tokenId];
   if (status === "completed") return "success";
