@@ -4235,12 +4235,12 @@ const executeScheduledTask = async (task) => {
       return;
     }
     // 获取当前未过期的所有 token ID 集合（用于快速查找）
-    const validTokenIds = new Set(tokens.value.map(t => t.id));
+    // const validTokenIds = new Set(tokens.value.map(t => t.id));
 
     // Set selected tokens from the task - use selectedTokens if connectedTokens is not available
-    selectedTokens.value = [...(task.connectedTokens || task.selectedTokens)]
-        .filter(token => validTokenIds.has(token.id));
-    // selectedTokens.value = [...(task.connectedTokens || task.selectedTokens)];
+    // selectedTokens.value = [...(task.connectedTokens || task.selectedTokens)]
+    //     .filter(token => validTokenIds.has(token.id));
+    selectedTokens.value = [...(task.connectedTokens || task.selectedTokens)];
 
     // Execute selected tasks in parallel
     const taskPromises = task.selectedTasks.map(async (taskName) => {
