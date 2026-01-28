@@ -4222,7 +4222,7 @@ const executeScheduledTask = async (task) => {
     message: `=== 开始执行定时任务: ${task.name} ===`,
     type: "info",
   });
-
+  isRunning.value = true;
   try {
     // Verify dependencies before executing task
     const dependenciesValid = await verifyTaskDependencies(task);
@@ -4296,6 +4296,8 @@ const executeScheduledTask = async (task) => {
         `[${new Date().toISOString()}] Error executing scheduled task ${task.name}:`,
         error,
     );
+  }finally {
+    isRunning.value = false;
   }
 };
 
