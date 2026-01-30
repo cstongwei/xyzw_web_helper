@@ -6512,23 +6512,33 @@ const batchTopUpFish = async () => {
       const fishNum = Number(myMonthInfo?.["2"]?.num || 0);
 
       // 计算目标数量
+      // 计算当月进度比例（当前日期/当月总天数），用于动态调整目标值
       const monthProgress = calculateMonthProgress();
+      // 获取当前日期时间对象
       const now = new Date();
+      // 计算当月总天数（通过创建下个月第0天的日期对象，其日期值即为当月总天数）
       const daysInMonth = new Date(
           now.getFullYear(),
           now.getMonth() + 1,
           0,
       ).getDate();
+      // 获取当前是本月的第几天（1-31）
       const dayOfMonth = now.getDate();
+      // 计算当月剩余天数（确保结果不为负数）
       const remainingDays = Math.max(0, daysInMonth - dayOfMonth);
+      // 根据剩余天数计算当前应达到的目标进度：
+      // - 若为当月最后一天（剩余0天），直接使用总目标值FISH_TARGET
+      // - 否则，取"总目标值"和"按当月进度比例计算的目标值（向上取整）"中的较小值
       const shouldBe =
           remainingDays === 0
               ? FISH_TARGET
               : Math.min(FISH_TARGET, Math.ceil(monthProgress * FISH_TARGET));
+      // 计算还需要完成的数量（确保结果不为负数）
       const need = Math.max(0, shouldBe - fishNum);
+
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `${token.name} 当前进度: ${fishNum}/${FISH_TARGET}，需要补齐: ${need}次`,
+        message: `${token.name} 月度钓鱼任务：还剩余${remainingDays}天， 当前进度: ${shouldBe}（应完成）/${fishNum}（实际完成）/${FISH_TARGET}（总量），需要补齐: ${need}次`,
         type: "info",
       });
       if (need <= 0) {
@@ -6760,7 +6770,7 @@ const batchTopUpArena = async () => {
       const need = Math.max(0, shouldBe - arenaNum);
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `${token.name} 当前进度: ${arenaNum}/${ARENA_TARGET}，需要补齐: ${need}次`,
+        message: `${token.name} 月度竞技场任务：还剩余${remainingDays}天， 当前进度: ${shouldBe}（应完成）/${arenaNum}（实际完成）/${ARENA_TARGET}（总量），需要补齐: ${need}次`,
         type: "info",
       });
       if (need <= 0) {
