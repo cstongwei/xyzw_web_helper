@@ -5267,6 +5267,16 @@ const batchbaoku45 = async () => {
 
 const batchmengjing = async () => {
   if (selectedTokens.value.length === 0) return;
+  const dayOfWeek = new Date().getDay();
+  const isOpen = dayOfWeek === 0 || dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 4
+  if(!isOpen){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `=== 梦境当前未在开放时间 ===`,
+      type: "error",
+    });
+    return
+  }
   isRunning.value = true;
   shouldStop.value = false;
   // 不再重置logs数组，保留之前的日志
@@ -5289,33 +5299,19 @@ const batchmengjing = async () => {
       await ensureConnection(tokenId);
       if (shouldStop.value) return;
       const mjbattleTeam = { 0: 107 };
-      const dayOfWeek = new Date().getDay();
-      if (
-        dayOfWeek === 0 ||
-        dayOfWeek === 1 ||
-        dayOfWeek === 3 ||
-        dayOfWeek === 4
-      ) {
-        await tokenStore.sendMessageWithPromise(
+      await tokenStore.sendMessageWithPromise(
           tokenId,
           "dungeon_selecthero",
           { battleTeam: mjbattleTeam },
           5000,
-        );
-        await new Promise((r) => setTimeout(r, 500));
-        tokenStatus.value[tokenId] = "completed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 咸王梦境已完成 ===`,
-          type: "success",
-        });
-      } else {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 当前未在开放时间 ===`,
-          type: "error",
-        });
-      }
+      );
+      await new Promise((r) => setTimeout(r, 500));
+      tokenStatus.value[tokenId] = "completed";
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== ${token.name} 咸王梦境已完成 ===`,
+        type: "success",
+      });
     } catch (error) {
       console.error(error);
       tokenStatus.value[tokenId] = "failed";
@@ -5347,6 +5343,16 @@ const batchmengjing = async () => {
  */
 const batchBuyDungeon = async () => {
   if (selectedTokens.value.length === 0) return;
+  const dayOfWeek = new Date().getDay();
+  const isOpen = dayOfWeek === 0 || dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 4
+  if(!isOpen){
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `=== 梦境当前未在开放时间 ===`,
+      type: "error",
+    });
+    return
+  }
   isRunning.value = true;
   shouldStop.value = false;
   // 不再重置logs数组，保留之前的日志
