@@ -7283,6 +7283,7 @@ const batchClaimCars = async () => {
       message: `=== 太晚了不收车了 ===`,
       type: "info",
     });
+    return
   }
 
   if (selectedTokens.value.length === 0) return;
