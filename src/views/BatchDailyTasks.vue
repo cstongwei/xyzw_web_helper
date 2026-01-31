@@ -3068,29 +3068,38 @@ const heroUpgrade = async () => {
 
       for(const heroId of heroIds){
         if (shouldStop.value) return;
-        for(let i = 0; i < 8; i++) {
-          if (shouldStop.value) return;
-          const result = await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "hero_heroupgradestar",
-              {heroId},
-              5000,
-          );
-          await new Promise((r) => setTimeout(r, 500));
-          if (result.error) {
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 英雄${heroId}第${i+1}次升星失败: ${result.error}`,
-              type: "error",
-            });
-            continue;
-          } else {
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 英雄${heroId}第${i+1}次升星成功`,
-              type: "success",
-            })
+        try{
+          for(let i = 0; i < 8; i++) {
+            if (shouldStop.value) return;
+            const result = await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "hero_heroupgradestar",
+                {heroId},
+                5000,
+            );
+            await new Promise((r) => setTimeout(r, 500));
+            if (result.error) {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄${heroId}第${i+1}次升星失败: ${result.error}，继续下一个英雄`,
+                type: "error",
+              });
+              continue;
+            } else {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄${heroId}第${i+1}次升星成功`,
+                type: "success",
+              })
+            }
           }
+        }catch (er){
+          console.error(er);
+          // addLog({
+          //   time: new Date().toLocaleTimeString(),
+          //   message: `${token.name} 英雄${heroId}处理异常: ${er.message || "未知错误"}，继续下一个英雄`,
+          //   type: "error",
+          // });
         }
       }
       addLog({
@@ -3104,7 +3113,7 @@ const heroUpgrade = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `=== ${token.name} 英雄升星失败: ${error.message || "未知错误"}`,
+        message: `=== ${token.name} 英雄升星关键错误: ${error.message || "未知错误"}`,
         type: "error",
       });
     } finally {
@@ -3120,7 +3129,7 @@ const heroUpgrade = async () => {
   });
 
   // 等待所有任务完成
-  await Promise.all(taskPromises);
+  await Promise.allSettled(taskPromises);
 
   isRunning.value = false;
   currentRunningTokenId.value = null;
@@ -3152,61 +3161,70 @@ const heroBookUpgrade = async () => {
       await ensureConnection(tokenId);
       if (shouldStop.value) return;
 
-      for(const heroId of heroIds){
-        if (shouldStop.value) return;
-        for(let i = 0; i < 8; i++) {
+      try{
+        for(const heroId of heroIds){
           if (shouldStop.value) return;
-          const result = await tokenStore.sendMessageWithPromise(
+          for(let i = 0; i < 8; i++) {
+            if (shouldStop.value) return;
+            const result = await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "book_upgrade",
+                {heroId},
+                5000,
+            );
+            await new Promise((r) => setTimeout(r, 500));
+            if (result.error) {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄${heroId}第${i+1}次图鉴升级失败: ${result.error}`,
+                type: "error",
+              });
+              continue;
+            } else {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄${heroId}第${i+1}次图鉴升级成功`,
+                type: "success",
+              })
+            }
+          }
+        }
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== ${token.name} 图鉴升级完成 ===`,
+          type: "success",
+        });
+        for(let i = 0; i < 5; i++) {
+          if (shouldStop.value) return;
+          const result =await tokenStore.sendMessageWithPromise(
               tokenId,
-              "book_upgrade",
-              {heroId},
+              "book_claimpointreward",
+              {},
               5000,
           );
           await new Promise((r) => setTimeout(r, 500));
           if (result.error) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `${token.name} 英雄${heroId}第${i+1}次图鉴升级失败: ${result.error}`,
+              message: `${token.name} 第${i+1}次领图鉴奖励失败: ${result.error}`,
               type: "error",
             });
             continue;
           } else {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `${token.name} 英雄${heroId}第${i+1}次图鉴升级成功`,
+              message: `${token.name} 第${i+1}次领图鉴奖励成功`,
               type: "success",
             })
           }
         }
-      }
-      addLog({
-        time: new Date().toLocaleTimeString(),
-        message: `=== ${token.name} 图鉴升级完成 ===`,
-        type: "success",
-      });
-      for(let i = 0; i < 5; i++) {
-        if (shouldStop.value) return;
-        const result =await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "book_claimpointreward",
-            {},
-            5000,
-        );
-        await new Promise((r) => setTimeout(r, 500));
-        if (result.error) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 第${i+1}次领图鉴奖励失败: ${result.error}`,
-            type: "error",
-          });
-          break;
-        } else {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 第${i+1}次领图鉴奖励成功`,
-            type: "success",
-          })
-        }
+      }catch (er) {
+        console.error(er);
+        // addLog({
+        //   time: new Date().toLocaleTimeString(),
+        //   message: `${token.name} 图鉴处理异常: ${er.message || "未知错误"}，继续下一个英雄`,
+        //   type: "error",
+        // });
       }
       addLog({
         time: new Date().toLocaleTimeString(),
@@ -3220,7 +3238,7 @@ const heroBookUpgrade = async () => {
       tokenStatus.value[tokenId] = "failed";
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `=== ${token.name} 图鉴处理失败: ${error.message || "未知错误"}`,
+        message: `=== ${token.name} 图鉴处理关键错误: ${error.message || "未知错误"}`,
         type: "error",
       });
     } finally {
