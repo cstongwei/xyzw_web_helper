@@ -507,18 +507,19 @@
                     ? `正在执行: ${currentRunningTokenName}`
                     : "执行日志"
                 }}
-              </div>
-              <div class="log-header-controls">
-                <n-checkbox v-model:checked="autoScrollLog" size="small">
-                  自动滚动
-                </n-checkbox>
                 <n-checkbox v-model:checked="filterErrorsOnly" size="small">
                   只看错误
                 </n-checkbox>
                 <n-tag v-if="errorCount > 0" type="error" size="small">
                   {{ errorCount }} 个错误
                 </n-tag>
+              </div>
+              <div class="log-header-controls">
+                <n-checkbox v-model:checked="autoScrollLog" size="small">
+                  自动滚动
+                </n-checkbox>
                 <n-button size="small" @click="copyLogs"> 复制日志 </n-button>
+                <n-button size="small" @click="cleanLogs"> 清理日志 </n-button>
               </div>
             </div>
           </template>
@@ -4931,6 +4932,9 @@ const copyLogs = () => {
     });
 };
 
+const cleanLogs = () => {
+  logs.value = [];
+};
 const waitForConnection = async (
   tokenId,
   timeout = batchSettings.connectionTimeout,
