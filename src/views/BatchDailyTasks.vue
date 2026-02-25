@@ -358,6 +358,17 @@
               一键梦境
             </n-button>
             <n-button
+                size="small"
+                @click="batchbuymengjing"
+                :disabled="
+                isRunning ||
+                selectedTokens.length === 0 ||
+                !ismengjingActivityOpen
+              "
+            >
+              一键购买梦境
+            </n-button>
+            <n-button
               size="small"
               @click="batchclubsign"
               :disabled="isRunning || selectedTokens.length === 0"
@@ -4548,7 +4559,7 @@ const {
 } = tasksItem;
 
 const tasksDungeon = createTasksDungeon(createTaskDeps());
-const { batchbaoku13, batchbaoku45, batchmengjing } = tasksDungeon;
+const { batchbaoku13, batchbaoku45, batchmengjing,batchbuymengjing } = tasksDungeon;
 
 const tasksArena = createTasksArena(createTaskDeps());
 const { batcharenafight, batchTopUpFish, batchTopUpArena } = tasksArena;
